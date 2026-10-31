@@ -286,8 +286,11 @@ var Store = (function () {
 
     // Items
     newItemId: function () { return newId('item'); },
-    saveItem: function (item) {
-      upsert(state.items, item);
+    // A new item goes straight after afterId when given, otherwise at the end.
+    saveItem: function (item, afterId) {
+      var after = afterId ? state.items.indexOf(find(state.items, afterId)) : -1;
+      if (after !== -1) state.items.splice(after + 1, 0, item);
+      else upsert(state.items, item);
       commit();
     },
     itemPackedCount: function (itemId) {

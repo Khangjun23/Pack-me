@@ -5,6 +5,7 @@
 
   var ui = { search: '', category: 'All', justPacked: null, flying: {} };
   var itemDraft = null;
+  var copySourceId = null;
   var bagDraft = null;
   var nameSubmit = null;
   var toastTimer = null;
@@ -246,6 +247,7 @@
         '<div class="card-actions">' +
         '<button class="btn" data-action="pack" data-id="' + esc(item.id) + '" data-fk="pack-' + esc(item.id) + '" aria-label="Add ' + esc(item.name) + ' to bag">Add</button>' +
         '<button class="btn" data-action="item-edit" data-id="' + esc(item.id) + '" aria-label="Edit ' + esc(item.name) + '">Edit</button>' +
+        '<button class="btn" data-action="item-duplicate" data-id="' + esc(item.id) + '" aria-label="Duplicate ' + esc(item.name) + '" title="Duplicate this item">Copy</button>' +
         '</div></div></article>';
     }).join(''));
     $('no-results').hidden = list.length > 0;
@@ -406,11 +408,17 @@
 
   // ----- Item dialog -----
 
-  function openItemDialog(item) {
+  // With isCopy, the form starts from item but saves as a new item placed after it.
+  function openItemDialog(item, isCopy) {
     itemDraft = item ? JSON.parse(JSON.stringify(item)) : { id: null, icon: '📦' };
+    copySourceId = isCopy ? item.id : null;
+    if (isCopy) {
+      itemDraft.id = null;
+      itemDraft.name = item.name + ' (copy)';
+    }
     var form = $('item-form');
     var dims = itemDraft.dimsCm || ['', '', ''];
-    $('item-dialog-title').textContent = item ? 'Edit item' : 'Add item';
+    $('item-dialog-title').textContent = isCopy ? 'Duplicate item' : item ? 'Edit item' : 'Add item';
     form.elements.name.value = itemDraft.name || '';
     form.elements.description.value = itemDraft.description || '';
     form.elements.category.value = itemDraft.category || '';
@@ -422,18 +430,19 @@
     form.elements.carryOnOnly.checked = itemDraft.carryOnOnly === true;
     form.elements.ownedQty.value = itemDraft.ownedQty || 1;
     form.elements.isCube.checked = itemDraft.cube === true;
-    form.elements.isCube.disabled = !!item;
+    form.elements.isCube.disabled = !!item && !isCopy;
     form.elements.capacityL.value = itemDraft.cube === true ? itemDraft.capacityL : '';
     syncCubeFields();
     $('photo-input').value = '';
     $('item-error').textContent = '';
-    $('item-delete').hidden = !item;
+    $('item-delete').hidden = !item || !!isCopy;
     $('category-list').innerHTML = categories().map(function (c) {
       return '<option value="' + esc(c) + '"></option>';
     }).join('');
     renderIconPicker();
     renderPhotoPreview();
     $('item-dialog').showModal();
+    if (isCopy) form.elements.name.select();
   }
 
   function renderIconPicker() {
@@ -513,7 +522,7 @@
       item.carryOnOnly = true;
     }
     $('item-dialog').close();
-    Store.saveItem(item);
+    Store.saveItem(item, copySourceId);
   }
 
   function deleteItem() {
@@ -674,6 +683,7 @@
     },
     'item-add': function () { openItemDialog(null); },
     'item-edit': function (el) { openItemDialog(Store.itemsById()[el.dataset.id]); },
+    'item-duplicate': function (el) { openItemDialog(Store.itemsById()[el.dataset.id], true); },
     'icon-choose': function (el) {
       itemDraft.icon = el.dataset.icon;
       renderIconPicker();
