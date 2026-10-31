@@ -1,0 +1,784 @@
+// Rendering, events and dialogs.
+(function () {
+  var $ = function (id) { return document.getElementById(id); };
+  var fmt = Calc.fmt;
+
+  var ui = { search: '', category: 'All', justPacked: null, flying: {} };
+  var itemDraft = null;
+  var bagDraft = null;
+  var nameSubmit = null;
+  var toastTimer = null;
+
+  function esc(value) {
+    return String(value).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
+
+  // Skips the DOM write when nothing changed, which avoids image flicker and lost focus.
+  // When it does write, focus returns to the element with the same data-fk.
+  function setHTML(el, html) {
+    if (el._html === html) return;
+    var active = document.activeElement;
+    var focusKey = active && el.contains(active) ? active.dataset.fk : null;
+    el._html = html;
+    el.innerHTML = html;
+    if (focusKey) (el.querySelector('[data-fk="' + focusKey + '"]') || el).focus();
+  }
+
+  function toast(message) {
+    var el = $('toast');
+    el.textContent = message;
+    el.hidden = false;
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(function () { el.hidden = true; }, 4500);
+  }
+
+  function media(item) {
+    return item.photo
+      ? '<img src="' + esc(item.photo) + '" alt="" draggable="false">'
+      : esc(item.icon);
+  }
+
+  // ----- Rendering -----
+
+  function render() {
+    renderTopbar();
+    renderTabs();
+    renderBag();
+    renderFilters();
+    renderCards();
+    renderInBagBadges();
+  }
+
+  function renderTopbar() {
+    var state = Store.state;
+    var trip = Store.trip();
+    setHTML($('trip-select'), state.trips.map(function (t) {
+      return '<option value="' + esc(t.id) + '">' + esc(t.name) + '</option>';
+    }).join(''));
+    $('trip-select').value = trip.id;
+    $('trip-delete').disabled = state.trips.length < 2;
+    var total = Calc.tripWeightKg(trip, Store.bagsById(), Store.itemsById());
+    var bagCount = trip.bagIds.length;
+    var looseCount = Calc.looseCubeIds(trip, Store.itemsById()).length;
+    $('trip-total').innerHTML = 'Trip total: <b>' + fmt(total) + ' kg</b> across ' +
+      bagCount + (bagCount === 1 ? ' bag' : ' bags') +
+      (looseCount ? ', with ' + looseCount + (looseCount === 1 ? ' cube' : ' cubes') + ' not in a bag' : '');
+  }
+
+  function renderTabs() {
+    var trip = Store.trip();
+    var bags = Store.bagsById();
+    setHTML($('bag-tabs'), trip.bagIds.map(function (id) {
+      var selected = !trip.activeCubeId && id === trip.activeBagId;
+      return '<button class="tab" role="tab" data-action="bag-select" data-id="' + esc(id) + '" data-fk="tab-' + esc(id) + '" aria-selected="' + selected + '">' +
+        esc(bags[id].name) + '<span class="tab-count">' + Store.bagItemCountInTrip(id) + '</span></button>';
+    }).join(''));
+    var cubes = Store.state.items.filter(function (item) { return item.cube === true; });
+    $('cube-row').hidden = cubes.length === 0;
+    setHTML($('cube-tabs'), cubes.map(function (cube) {
+      var count = Calc.cubeTotals(cube, trip.cubes[cube.id], Store.itemsById()).count;
+      return '<button class="tab tab-cube" role="tab" data-action="cube-select" data-id="' + esc(cube.id) + '" data-fk="tab-' + esc(cube.id) + '" aria-selected="' + (cube.id === trip.activeCubeId) + '">' +
+        esc(cube.name) + '<span class="tab-count">' + count + '</span></button>';
+    }).join(''));
+    $('bag-edit').textContent = trip.activeCubeId ? 'Edit cube' : 'Edit bag';
+    $('bag-edit').disabled = !trip.activeBagId && !trip.activeCubeId;
+  }
+
+  function renderBag() {
+    var bag = Store.container();
+    var openCube = Store.cube();
+    $('suitcase').classList.toggle('is-cube', !!openCube);
+    $('bag-tag').textContent = bag ? bag.name : 'No bag';
+    $('open-title').textContent = openCube ? 'Filling ' + openCube.name : bag ? 'Packing ' + bag.name : '';
+    if (!bag) {
+      updateMeter($('meter-weight'), 0, 0, 'ok', '');
+      updateMeter($('meter-volume'), 0, 0, 'ok', '');
+      setHTML($('status'), '');
+      $('fill').style.height = '0';
+      $('suitcase').dataset.level = 'ok';
+      setHTML($('packed'), '<p class="empty-hint">This trip has no bags yet. Use “+ Add bag” to choose one.</p>');
+      return;
+    }
+    var items = Store.itemsById();
+    var packed = Store.packedInBag();
+    var trip = Store.trip();
+    var result = Calc.evaluate(bag, packed, items, trip.cubes);
+
+    if (openCube) {
+      var bagId = Calc.cubeBagId(trip, openCube.id);
+      result.messages.push(bagId
+        ? { level: 'ok', text: 'In ' + Store.bagsById()[bagId].name }
+        : { level: 'warn', text: 'Not in a bag yet' });
+    }
+
+    updateMeter($('meter-weight'), result.weightKg, bag.weightLimitKg, result.weightLevel,
+      'Includes the ' + fmt(bag.emptyWeightKg) + ' kg ' + (openCube ? 'cube' : 'bag'));
+    updateMeter($('meter-volume'), result.volumeL, bag.capacityL, result.volumeLevel,
+      result.volumeL <= bag.capacityL ? fmt(bag.capacityL - result.volumeL) + ' L free' : 'No space left');
+
+    var symbols = { ok: '✓', warn: '!', over: '✕' };
+    setHTML($('status'), result.messages.map(function (m) {
+      return '<li data-level="' + m.level + '">' + symbols[m.level] + ' ' + esc(m.text) + '</li>';
+    }).join(''));
+
+    $('suitcase').dataset.level = result.volumeLevel;
+    var fillPct = bag.capacityL > 0 ? Math.min(100, result.volumeL / bag.capacityL * 100) : 0;
+    $('fill').style.height = 'calc((100% - 18px) * ' + fillPct / 100 + ')';
+
+    renderPacked(packed, items, result);
+  }
+
+  function renderPacked(packed, items, result) {
+    var problems = {};
+    result.oversized.forEach(function (o) { problems[o.item.id] = true; });
+    result.misplaced.forEach(function (item) { problems[item.id] = true; });
+    result.overfull.forEach(function (o) { problems[o.item.id] = true; });
+    var chips = Store.state.items.filter(function (item) { return packed[item.id] > 0; }).map(function (item) {
+      var qty = packed[item.id];
+      if (item.cube === true) return cubeChip(item, items, problems);
+      return '<div class="chip" data-drag="packed" data-id="' + esc(item.id) + '" data-problem="' + (problems[item.id] === true) + '"' +
+        ' title="' + esc(item.name) + ', ' + fmt(item.weightKg) + ' kg, ' + fmt(item.volumeL) + ' L. Drag out to remove.">' +
+        (qty > 1 ? '<span class="chip-qty">x' + qty + '</span>' : '') +
+        '<button class="chip-remove" data-action="unpack" data-id="' + esc(item.id) + '" data-fk="unpack-' + esc(item.id) + '" aria-label="Remove one ' + esc(item.name) + '">×</button>' +
+        '<span class="chip-media">' + media(item) + '</span>' +
+        '<span class="chip-name">' + esc(item.name) + '</span>' +
+        '</div>';
+    });
+    var html = chips.join('') || '<p class="empty-hint">Drag items here to pack them</p>';
+
+    var container = $('packed');
+    setHTML(container, html);
+
+    if (ui.justPacked) {
+      var chip = container.querySelector('.chip[data-id="' + ui.justPacked + '"]');
+      if (chip) chip.classList.add('pop');
+      ui.justPacked = null;
+    }
+  }
+
+  function cubeChip(cube, items, problems) {
+    var totals = Calc.cubeTotals(cube, Store.trip().cubes[cube.id], items);
+    return '<div class="chip chip-cube" data-drag="packed" data-id="' + esc(cube.id) + '" data-problem="' + (problems[cube.id] === true) + '"' +
+      ' title="' + esc(cube.name) + '. Drag out to take it out of the bag. What is inside stays in the cube.">' +
+      '<button class="chip-remove" data-action="unpack" data-id="' + esc(cube.id) + '" data-fk="unpack-' + esc(cube.id) + '" aria-label="Take ' + esc(cube.name) + ' out of the bag">×</button>' +
+      '<span class="chip-media">' + media(cube) + '</span>' +
+      '<span class="chip-name">' + esc(cube.name) + '</span>' +
+      '<span class="chip-detail">' + totals.count + (totals.count === 1 ? ' item · ' : ' items · ') + fmt(totals.weightKg) + ' kg · ' + fmt(totals.volumeL) + ' L</span>' +
+      '<button class="btn chip-open" data-action="cube-select" data-id="' + esc(cube.id) + '">Open</button>' +
+      '</div>';
+  }
+
+  function updateMeter(el, value, limit, level, note) {
+    el.dataset.level = level;
+    var hasLimit = limit !== Infinity;
+    el.querySelector('[data-limit-wrap]').hidden = !hasLimit;
+    el.querySelector('[data-limit]').textContent = hasLimit ? fmt(limit) : '';
+    el.querySelector('[data-note]').textContent = note;
+    var track = el.querySelector('.meter-track');
+    if (hasLimit) track.setAttribute('aria-valuemax', limit);
+    else track.removeAttribute('aria-valuemax');
+    track.setAttribute('aria-valuenow', value);
+    el.querySelector('.meter-bar').style.width = (limit > 0 ? Math.min(100, value / limit * 100) : 0) + '%';
+    countTo(el.querySelector('[data-value]'), value);
+  }
+
+  function countTo(el, target) {
+    var from = el._value === undefined ? target : el._value;
+    el._value = target;
+    cancelAnimationFrame(el._frame);
+    if (from === target || Drag.reducedMotion()) {
+      el.textContent = fmt(target);
+      return;
+    }
+    var start = performance.now();
+    (function step(now) {
+      var t = Math.min(1, (now - start) / 450);
+      var eased = 1 - Math.pow(1 - t, 3);
+      el.textContent = fmt(from + (target - from) * eased);
+      if (t < 1) el._frame = requestAnimationFrame(step);
+    })(start);
+  }
+
+  function categories() {
+    var seen = {};
+    return Store.state.items.reduce(function (list, item) {
+      if (seen[item.category] !== true) {
+        seen[item.category] = true;
+        list.push(item.category);
+      }
+      return list;
+    }, []);
+  }
+
+  function renderFilters() {
+    var cats = categories();
+    if (ui.category !== 'All' && cats.indexOf(ui.category) === -1) ui.category = 'All';
+    setHTML($('filters'), ['All'].concat(cats).map(function (c, i) {
+      return '<button class="filter" data-action="filter" data-category="' + esc(c) + '" data-fk="filter-' + i + '" aria-pressed="' + (c === ui.category) + '">' + esc(c) + '</button>';
+    }).join(''));
+  }
+
+  function visibleItems() {
+    var query = ui.search.trim().toLowerCase();
+    var trip = Store.trip();
+    return Store.state.items.filter(function (item) {
+      if (Calc.remaining(item, trip) === 0) return false;
+      if (ui.category !== 'All' && item.category !== ui.category) return false;
+      if (!query) return true;
+      return (item.name + ' ' + item.description + ' ' + item.category).toLowerCase().indexOf(query) !== -1;
+    });
+  }
+
+  function renderCards() {
+    var list = visibleItems();
+    setHTML($('cards'), list.map(function (item) {
+      return '<article class="card" data-drag="card" data-id="' + esc(item.id) + '">' +
+        '<span class="in-bag" hidden></span>' +
+        '<div class="card-media">' + media(item) + '</div>' +
+        '<div class="card-body">' +
+        '<div class="card-name">' + esc(item.name) + '</div>' +
+        '<div class="card-desc">' + esc(item.description) + '</div>' +
+        '<div class="card-meta">' + fmt(item.weightKg) + ' kg · ' +
+        (item.cube === true ? 'holds ' + fmt(item.capacityL) : fmt(item.volumeL)) + ' L<span class="card-left"></span></div>' +
+        (item.carryOnOnly ? '<div class="card-flag">Carry-on only</div>' : '') +
+        '<div class="card-actions">' +
+        '<button class="btn" data-action="pack" data-id="' + esc(item.id) + '" data-fk="pack-' + esc(item.id) + '" aria-label="Add ' + esc(item.name) + ' to bag">Add</button>' +
+        '<button class="btn" data-action="item-edit" data-id="' + esc(item.id) + '" aria-label="Edit ' + esc(item.name) + '">Edit</button>' +
+        '</div></div></article>';
+    }).join(''));
+    $('no-results').hidden = list.length > 0;
+    $('no-results').textContent = !ui.search.trim() && ui.category === 'All'
+      ? 'Everything in your inventory is packed for this trip.'
+      : 'No unpacked items match.';
+  }
+
+  function renderInBagBadges() {
+    var packed = Store.packedInBag();
+    var items = Store.itemsById();
+    var bag = Store.bag();
+    var openCube = Store.cube();
+    var trip = Store.trip();
+    document.querySelectorAll('#cards .card').forEach(function (card) {
+      var item = items[card.dataset.id];
+      var badge = card.querySelector('.in-bag');
+      var qty = packed[card.dataset.id] || 0;
+      badge.hidden = qty === 0;
+      badge.textContent = (openCube ? 'In cube x' : 'In bag x') + qty;
+      var left = '';
+      if (item.cube === true) {
+        var inside = Calc.cubeTotals(item, trip.cubes[item.id], items).count;
+        if (inside) left = ' · ' + inside + ' inside';
+      } else if (item.ownedQty > 1) {
+        left = ' · ' + Calc.remaining(item, trip) + ' of ' + item.ownedQty + ' left';
+      }
+      card.querySelector('.card-left').textContent = left;
+      var blocked = openCube
+        ? item.cube === true || item.carryOnOnly === true
+        : !!bag && Calc.carryOnBlocked(item, bag);
+      card.classList.toggle('blocked', blocked);
+    });
+  }
+
+  // ----- Packing -----
+
+  function flyTarget(id) {
+    var container = $('packed');
+    var chip = container.querySelector('.chip[data-id="' + id + '"]');
+    if (chip) {
+      var c = chip.getBoundingClientRect();
+      var box = container.getBoundingClientRect();
+      if (c.top >= box.top && c.bottom <= box.bottom) return chip;
+    }
+    return container;
+  }
+
+  function celebrate() {
+    if (Drag.reducedMotion()) return;
+    $('suitcase').animate([
+      { transform: 'scale(1)' },
+      { transform: 'scale(1.025, .97)', offset: 0.3 },
+      { transform: 'scale(.99, 1.015)', offset: 0.65 },
+      { transform: 'scale(1)' }
+    ], { duration: 340, easing: 'ease-out' });
+    $('lid').animate([
+      { transform: 'perspective(600px) rotateX(16deg)' },
+      { transform: 'perspective(600px) rotateX(34deg)', offset: 0.35 },
+      { transform: 'perspective(600px) rotateX(10deg)', offset: 0.7 },
+      { transform: 'perspective(600px) rotateX(16deg)' }
+    ], { duration: 420, easing: 'ease-out' });
+  }
+
+  function blockReason(id) {
+    var item = Store.itemsById()[id];
+    var openCube = Store.cube();
+    if (openCube && item && item.cube === true) return 'A cube cannot go inside another cube. Open a bag to pack it.';
+    if (openCube && item && item.carryOnOnly === true) {
+      return item.name + ' is carry-on only, so pack it straight into your carry-on bag rather than a cube.';
+    }
+    var bag = Store.bag();
+    if (!openCube && !bag) return 'Add a bag to this trip first.';
+    if (!openCube && item && Calc.carryOnBlocked(item, bag)) {
+      return item.name + ' can only go in a carry-on bag, and ' + bag.name + ' is not one.';
+    }
+    if (item && Calc.remaining(item, Store.trip()) === 0) {
+      return 'All of your ' + item.name + ' are already packed for this trip.';
+    }
+    return null;
+  }
+
+  function refuse(id) {
+    toast(blockReason(id));
+    if (Drag.reducedMotion()) return;
+    $('suitcase').animate([
+      { transform: 'translateX(0)' },
+      { transform: 'translateX(-7px)', offset: 0.2 },
+      { transform: 'translateX(6px)', offset: 0.45 },
+      { transform: 'translateX(-3px)', offset: 0.7 },
+      { transform: 'translateX(0)' }
+    ], { duration: 320, easing: 'ease-out' });
+  }
+
+  function pack(id) {
+    ui.justPacked = id;
+    if (Store.pack(id)) {
+      celebrate();
+    } else {
+      ui.justPacked = null;
+      refuse(id);
+    }
+  }
+
+  // ----- Dialog helpers -----
+
+  function confirmAction(title, text, okLabel) {
+    return new Promise(function (resolve) {
+      var dialog = $('confirm-dialog');
+      $('confirm-title').textContent = title;
+      $('confirm-text').textContent = text;
+      $('confirm-ok').textContent = okLabel;
+      function finish(answer) {
+        $('confirm-ok').onclick = null;
+        $('confirm-cancel').onclick = null;
+        dialog.oncancel = null;
+        if (dialog.open) dialog.close();
+        resolve(answer);
+      }
+      $('confirm-ok').onclick = function () { finish(true); };
+      $('confirm-cancel').onclick = function () { finish(false); };
+      dialog.oncancel = function () { finish(false); };
+      dialog.showModal();
+    });
+  }
+
+  function askName(title, value, submit) {
+    $('name-title').textContent = title;
+    $('name-error').textContent = '';
+    $('name-form').elements.name.value = value;
+    nameSubmit = submit;
+    $('name-dialog').showModal();
+    $('name-form').elements.name.select();
+  }
+
+  function numberField(form, name) {
+    var raw = form.elements[name].value;
+    return raw === '' ? null : Number(raw);
+  }
+
+  // Changing a dimension recalculates the volume. The volume can still be typed over afterwards.
+  function autoVolume(form, volumeField) {
+    form.addEventListener('input', function (e) {
+      if (['dimL', 'dimW', 'dimH'].indexOf(e.target.name) === -1) return;
+      var volume = Calc.volumeFromDims([numberField(form, 'dimL'), numberField(form, 'dimW'), numberField(form, 'dimH')]);
+      if (volume !== null) form.elements[volumeField()].value = volume;
+    });
+  }
+
+  function syncCubeFields() {
+    var form = $('item-form');
+    var isCube = form.elements.isCube.checked;
+    $('cube-capacity').hidden = !isCube;
+    $('owned-field').hidden = isCube;
+    $('carry-on-field').hidden = isCube;
+    $('volume-label').firstChild.textContent = isCube ? 'Empty volume (L)' : 'Packed volume (L)';
+  }
+
+  // ----- Item dialog -----
+
+  function openItemDialog(item) {
+    itemDraft = item ? JSON.parse(JSON.stringify(item)) : { id: null, icon: '📦' };
+    var form = $('item-form');
+    var dims = itemDraft.dimsCm || ['', '', ''];
+    $('item-dialog-title').textContent = item ? 'Edit item' : 'Add item';
+    form.elements.name.value = itemDraft.name || '';
+    form.elements.description.value = itemDraft.description || '';
+    form.elements.category.value = itemDraft.category || '';
+    form.elements.weightKg.value = item ? itemDraft.weightKg : '';
+    form.elements.volumeL.value = item ? itemDraft.volumeL : '';
+    form.elements.dimL.value = dims[0];
+    form.elements.dimW.value = dims[1];
+    form.elements.dimH.value = dims[2];
+    form.elements.carryOnOnly.checked = itemDraft.carryOnOnly === true;
+    form.elements.ownedQty.value = itemDraft.ownedQty || 1;
+    form.elements.isCube.checked = itemDraft.cube === true;
+    form.elements.isCube.disabled = !!item;
+    form.elements.capacityL.value = itemDraft.cube === true ? itemDraft.capacityL : '';
+    syncCubeFields();
+    $('photo-input').value = '';
+    $('item-error').textContent = '';
+    $('item-delete').hidden = !item;
+    $('category-list').innerHTML = categories().map(function (c) {
+      return '<option value="' + esc(c) + '"></option>';
+    }).join('');
+    renderIconPicker();
+    renderPhotoPreview();
+    $('item-dialog').showModal();
+  }
+
+  function renderIconPicker() {
+    var icons = Seed.ICONS.indexOf(itemDraft.icon) === -1 ? [itemDraft.icon].concat(Seed.ICONS) : Seed.ICONS;
+    $('icon-picker').innerHTML = icons.map(function (icon) {
+      return '<button type="button" class="icon-choice" role="radio" data-action="icon-choose" data-icon="' + esc(icon) + '" aria-checked="' + (icon === itemDraft.icon) + '">' + esc(icon) + '</button>';
+    }).join('');
+  }
+
+  function renderPhotoPreview() {
+    $('photo-preview').innerHTML = media(itemDraft);
+    $('photo-remove').hidden = !itemDraft.photo;
+  }
+
+  function shrinkPhoto(file) {
+    return new Promise(function (resolve, reject) {
+      var url = URL.createObjectURL(file);
+      var img = new Image();
+      img.onload = function () {
+        var SIZE = 200;
+        var scale = Math.min(1, SIZE / Math.max(img.naturalWidth, img.naturalHeight));
+        var canvas = document.createElement('canvas');
+        canvas.width = Math.max(1, Math.round(img.naturalWidth * scale));
+        canvas.height = Math.max(1, Math.round(img.naturalHeight * scale));
+        canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+        URL.revokeObjectURL(url);
+        resolve(canvas.toDataURL('image/jpeg', 0.8));
+      };
+      img.onerror = function () {
+        URL.revokeObjectURL(url);
+        reject(new Error('That file could not be read as an image.'));
+      };
+      img.src = url;
+    });
+  }
+
+  function submitItem(e) {
+    e.preventDefault();
+    var form = e.target;
+    var name = form.elements.name.value.trim();
+    var category = form.elements.category.value.trim();
+    var weight = numberField(form, 'weightKg');
+    var volume = numberField(form, 'volumeL');
+    var dims = [numberField(form, 'dimL'), numberField(form, 'dimW'), numberField(form, 'dimH')];
+    var filled = dims.filter(function (d) { return d !== null; }).length;
+    var isCube = form.elements.isCube.checked;
+    var capacity = numberField(form, 'capacityL');
+    var owned = isCube ? 1 : numberField(form, 'ownedQty');
+    var error = '';
+    if (!name) error = 'Enter a name.';
+    else if (!category) error = 'Enter a category.';
+    else if (weight === null || weight < 0) error = 'Enter a weight of 0 or more.';
+    else if (volume === null || volume < 0) error = 'Enter a volume of 0 or more.';
+    else if (owned === null || owned < 1 || owned % 1 !== 0) error = 'Enter how many you own, as a whole number of 1 or more.';
+    else if (isCube && (capacity === null || capacity <= 0)) error = 'Enter how many litres the cube holds.';
+    else if (filled !== 0 && filled !== 3) error = 'Fill in all three dimensions, or leave them all blank.';
+    else if (filled === 3 && dims.some(function (d) { return d <= 0; })) error = 'Dimensions must be greater than 0.';
+    $('item-error').textContent = error;
+    if (error) return;
+
+    var item = {
+      id: itemDraft.id || Store.newItemId(),
+      name: name,
+      description: form.elements.description.value.trim(),
+      category: category,
+      weightKg: weight,
+      volumeL: volume,
+      ownedQty: owned,
+      icon: itemDraft.icon
+    };
+    if (filled === 3) item.dimsCm = dims;
+    if (itemDraft.photo) item.photo = itemDraft.photo;
+    if (isCube) {
+      item.cube = true;
+      item.capacityL = capacity;
+    } else if (form.elements.carryOnOnly.checked) {
+      item.carryOnOnly = true;
+    }
+    $('item-dialog').close();
+    Store.saveItem(item);
+  }
+
+  function deleteItem() {
+    var id = itemDraft.id;
+    var count = Store.itemPackedCount(id);
+    var isCube = itemDraft.cube === true;
+    $('item-dialog').close();
+    var text = count > 0
+      ? 'It is packed ' + count + (count === 1 ? ' time' : ' times') + ' across your trips and will be taken out of those bags.'
+      : 'It will be removed from your inventory.';
+    if (isCube) text += ' Anything inside it goes back to your inventory.';
+    confirmAction('Delete this item?', text, 'Delete item').then(function (yes) {
+      if (yes) Store.deleteItem(id);
+    });
+  }
+
+  // ----- Bag dialogs -----
+
+  function openBagDialog(bag) {
+    bagDraft = bag || null;
+    var form = $('bag-form');
+    var interior = (bag && bag.interiorCm) || ['', '', ''];
+    $('bag-dialog-title').textContent = bag ? 'Edit bag' : 'New bag';
+    form.elements.name.value = bag ? bag.name : '';
+    form.elements.emptyWeightKg.value = bag ? bag.emptyWeightKg : '';
+    form.elements.weightLimitKg.value = bag ? bag.weightLimitKg : '';
+    form.elements.capacityL.value = bag ? bag.capacityL : '';
+    form.elements.dimL.value = interior[0];
+    form.elements.dimW.value = interior[1];
+    form.elements.dimH.value = interior[2];
+    form.elements.isCarryOn.checked = !!bag && bag.isCarryOn === true;
+    $('bag-error').textContent = '';
+    $('bag-delete').hidden = !bag;
+    $('bag-remove').hidden = !bag;
+    $('bag-dialog').showModal();
+  }
+
+  function submitBag(e) {
+    e.preventDefault();
+    var form = e.target;
+    var name = form.elements.name.value.trim();
+    var empty = numberField(form, 'emptyWeightKg');
+    var limit = numberField(form, 'weightLimitKg');
+    var capacity = numberField(form, 'capacityL');
+    var interior = [numberField(form, 'dimL'), numberField(form, 'dimW'), numberField(form, 'dimH')];
+    var error = '';
+    if (!name) error = 'Enter a name.';
+    else if (empty === null || empty < 0) error = 'Enter an empty weight of 0 or more.';
+    else if (limit === null || limit <= 0) error = 'Enter a weight limit greater than 0.';
+    else if (capacity === null || capacity <= 0) error = 'Enter a capacity greater than 0.';
+    else if (interior.some(function (d) { return d === null || d <= 0; })) error = 'Enter all three interior sizes.';
+    $('bag-error').textContent = error;
+    if (error) return;
+
+    var isNew = !bagDraft;
+    var record = {
+      id: isNew ? Store.newBagId() : bagDraft.id,
+      name: name,
+      emptyWeightKg: empty,
+      capacityL: capacity,
+      weightLimitKg: limit,
+      interiorCm: interior,
+      isCarryOn: form.elements.isCarryOn.checked
+    };
+    $('bag-dialog').close();
+    Store.saveBag(record, isNew);
+  }
+
+  function removeBagFromTrip() {
+    var bag = bagDraft;
+    var count = Store.bagItemCountInTrip(bag.id);
+    $('bag-dialog').close();
+    if (count === 0) {
+      Store.removeBagFromTrip(bag.id);
+      return;
+    }
+    confirmAction('Remove ' + bag.name + ' from this trip?',
+      'The ' + count + (count === 1 ? ' item' : ' items') + ' packed in it for this trip will be unpacked. The bag stays in your bag list.',
+      'Remove bag').then(function (yes) {
+      if (yes) Store.removeBagFromTrip(bag.id);
+    });
+  }
+
+  function deleteBag() {
+    var bag = bagDraft;
+    var count = Store.bagItemCountAllTrips(bag.id);
+    $('bag-dialog').close();
+    var text = 'It will be removed from every trip.' + (count > 0
+      ? ' The ' + count + (count === 1 ? ' item' : ' items') + ' packed in it will be unpacked.'
+      : '');
+    confirmAction('Delete ' + bag.name + '?', text, 'Delete bag').then(function (yes) {
+      if (yes) Store.deleteBag(bag.id);
+    });
+  }
+
+  function openBagPicker() {
+    var inTrip = Store.trip().bagIds;
+    var available = Store.state.bags.filter(function (b) { return inTrip.indexOf(b.id) === -1; });
+    $('bag-picker-list').innerHTML = available.length
+      ? available.map(function (b) {
+        return '<div class="bag-option"><div><b>' + esc(b.name) + '</b><small>' + fmt(b.capacityL) + ' L, up to ' + fmt(b.weightLimitKg) + ' kg' + (b.isCarryOn ? ', carry-on' : '') + '</small></div>' +
+          '<button type="button" class="btn" data-action="bag-pick" data-id="' + esc(b.id) + '">Add</button></div>';
+      }).join('')
+      : '<p>All your bags are already on this trip.</p>';
+    $('bag-picker').showModal();
+  }
+
+  // ----- Backups -----
+
+  function exportBackup() {
+    var blob = new Blob([Store.exportJSON()], { type: 'application/json' });
+    var url = URL.createObjectURL(blob);
+    var link = document.createElement('a');
+    link.href = url;
+    link.download = 'packing-backup-' + new Date().toISOString().slice(0, 10) + '.json';
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+  }
+
+  function importBackup(file) {
+    confirmAction('Replace everything with this backup?',
+      'Your current items, bags and trips will be replaced by "' + file.name + '".',
+      'Replace').then(function (yes) {
+      if (!yes) return null;
+      return file.text().then(function (json) {
+        Store.importJSON(json);
+        toast('Backup imported.');
+      });
+    }).catch(function (err) {
+      toast(err instanceof SyntaxError ? 'That file is not valid JSON.' : err.message);
+    });
+  }
+
+  // ----- Events -----
+
+  var actions = {
+    'pack': function (el) {
+      var id = el.dataset.id;
+      if (blockReason(id)) {
+        refuse(id);
+        return;
+      }
+      // A quick second click must not send more than you own while the first is in the air.
+      var left = Calc.remaining(Store.itemsById()[id], Store.trip());
+      if ((ui.flying[id] || 0) >= left) return;
+      ui.flying[id] = (ui.flying[id] || 0) + 1;
+      Drag.flyFrom(el.closest('.card'), id, function () {
+        ui.flying[id] -= 1;
+        pack(id);
+      });
+    },
+    'unpack': function (el) { Store.unpack(el.dataset.id); },
+    'filter': function (el) {
+      ui.category = el.dataset.category;
+      render();
+    },
+    'item-add': function () { openItemDialog(null); },
+    'item-edit': function (el) { openItemDialog(Store.itemsById()[el.dataset.id]); },
+    'icon-choose': function (el) {
+      itemDraft.icon = el.dataset.icon;
+      renderIconPicker();
+      renderPhotoPreview();
+    },
+    'bag-select': function (el) { Store.setActiveBag(el.dataset.id); },
+    'cube-select': function (el) { Store.setActiveCube(el.dataset.id); },
+    'bag-add': openBagPicker,
+    'bag-pick': function (el) {
+      $('bag-picker').close();
+      Store.addBagToTrip(el.dataset.id);
+    },
+    'bag-create': function () {
+      $('bag-picker').close();
+      openBagDialog(null);
+    },
+    'bag-edit': function () {
+      var openCube = Store.cube();
+      if (openCube) openItemDialog(openCube);
+      else openBagDialog(Store.bag());
+    },
+    'trip-new': function () {
+      askName('New trip', '', function (name) { Store.createTrip(name); });
+    },
+    'trip-rename': function () {
+      askName('Rename trip', Store.trip().name, function (name) { Store.renameTrip(name); });
+    },
+    'trip-duplicate': function () {
+      askName('Duplicate trip', Store.trip().name + ' (copy)', function (name) { Store.duplicateTrip(name); });
+    },
+    'trip-delete': function () {
+      var trip = Store.trip();
+      confirmAction('Delete ' + trip.name + '?', 'Its packing lists will be removed. Your items and bags stay.', 'Delete trip').then(function (yes) {
+        if (yes) Store.deleteTrip();
+      });
+    },
+    'export': exportBackup,
+    'import': function () { $('import-file').click(); },
+    'dialog-close': function (el) { el.closest('dialog').close(); }
+  };
+
+  document.addEventListener('click', function (e) {
+    var el = e.target.closest('[data-action]');
+    if (el && actions[el.dataset.action]) actions[el.dataset.action](el);
+  });
+
+  $('trip-select').addEventListener('change', function (e) { Store.setActiveTrip(e.target.value); });
+  $('search').addEventListener('input', function (e) {
+    ui.search = e.target.value;
+    render();
+  });
+  $('item-form').addEventListener('submit', submitItem);
+  $('bag-form').addEventListener('submit', submitBag);
+  autoVolume($('item-form'), function () {
+    return $('item-form').elements.isCube.checked ? 'capacityL' : 'volumeL';
+  });
+  autoVolume($('bag-form'), function () { return 'capacityL'; });
+  $('item-form').elements.isCube.addEventListener('change', syncCubeFields);
+  $('name-form').addEventListener('submit', function (e) {
+    e.preventDefault();
+    var name = e.target.elements.name.value.trim();
+    if (!name) {
+      $('name-error').textContent = 'Enter a name.';
+      return;
+    }
+    $('name-dialog').close();
+    nameSubmit(name);
+  });
+  $('item-delete').addEventListener('click', deleteItem);
+  $('bag-remove').addEventListener('click', removeBagFromTrip);
+  $('bag-delete').addEventListener('click', deleteBag);
+  $('photo-remove').addEventListener('click', function () {
+    delete itemDraft.photo;
+    $('photo-input').value = '';
+    renderPhotoPreview();
+  });
+  $('photo-input').addEventListener('change', function (e) {
+    var file = e.target.files[0];
+    if (!file) return;
+    shrinkPhoto(file).then(function (dataUrl) {
+      itemDraft.photo = dataUrl;
+      $('item-error').textContent = '';
+      renderPhotoPreview();
+    }).catch(function (err) {
+      $('item-error').textContent = err.message;
+    });
+  });
+  $('import-file').addEventListener('change', function (e) {
+    var file = e.target.files[0];
+    e.target.value = '';
+    if (file) importBackup(file);
+  });
+
+  Store.setSaveErrorHandler(function () {
+    toast('Browser storage is full, so this change is not saved. Remove some photos, then try again.');
+  });
+  Store.subscribe(render);
+  Store.load();
+  Drag.init({
+    dropZone: function () { return $('suitcase'); },
+    flyTarget: flyTarget,
+    onPack: pack,
+    isBlocked: function (id) { return blockReason(id) !== null; },
+    onBlocked: refuse,
+    onUnpack: function (id) { Store.unpack(id); }
+  });
+  render();
+})();

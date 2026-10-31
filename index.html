@@ -1,0 +1,241 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Packing Planner</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <h1 class="brand">Packing Planner</h1>
+    <div class="trip-controls">
+      <label for="trip-select">Trip</label>
+      <select id="trip-select"></select>
+      <button class="btn" data-action="trip-new">New</button>
+      <button class="btn" data-action="trip-rename">Rename</button>
+      <button class="btn" data-action="trip-duplicate">Duplicate</button>
+      <button class="btn" data-action="trip-delete" id="trip-delete">Delete</button>
+    </div>
+    <p class="trip-total" id="trip-total"></p>
+    <div class="backup-controls">
+      <button class="btn" data-action="export">Export</button>
+      <button class="btn" data-action="import">Import</button>
+      <input type="file" id="import-file" accept="application/json,.json" hidden>
+    </div>
+  </header>
+
+  <main class="layout">
+    <section class="bag-panel" aria-label="Open bag">
+      <div class="bag-tabs">
+        <div class="tabs" id="bag-tabs" role="tablist" aria-label="Bags on this trip"></div>
+        <button class="btn" data-action="bag-add">+ Add bag</button>
+        <button class="btn" data-action="bag-edit" id="bag-edit">Edit bag</button>
+      </div>
+      <div class="cube-row" id="cube-row">
+        <span class="cube-row-label">Cubes</span>
+        <div class="tabs" id="cube-tabs" role="tablist" aria-label="Packing cubes"></div>
+      </div>
+      <p class="open-title" id="open-title"></p>
+
+      <div class="meters" id="meters">
+        <div class="meter" id="meter-weight">
+          <div class="meter-label">
+            <span>Weight</span>
+            <span class="meter-value"><b data-value></b><span data-limit-wrap> / <span data-limit></span></span> kg</span>
+          </div>
+          <div class="meter-track" role="meter" aria-label="Weight used" aria-valuemin="0"><div class="meter-bar"></div></div>
+          <p class="meter-note" data-note></p>
+        </div>
+        <div class="meter" id="meter-volume">
+          <div class="meter-label">
+            <span>Volume</span>
+            <span class="meter-value"><b data-value></b><span data-limit-wrap> / <span data-limit></span></span> L</span>
+          </div>
+          <div class="meter-track" role="meter" aria-label="Volume used" aria-valuemin="0"><div class="meter-bar"></div></div>
+          <p class="meter-note" data-note></p>
+        </div>
+      </div>
+
+      <ul class="status" id="status" aria-live="polite"></ul>
+
+      <div class="suitcase" id="suitcase">
+        <div class="handle" aria-hidden="true"></div>
+        <div class="lid" id="lid" aria-hidden="true">
+          <div class="lid-lining">
+            <span class="strap"></span>
+            <span class="strap"></span>
+            <span class="bag-tag" id="bag-tag"></span>
+          </div>
+        </div>
+        <div class="case">
+          <div class="fill" id="fill" aria-hidden="true"></div>
+          <div class="packed" id="packed" tabindex="-1"></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="inventory" aria-label="Inventory">
+      <div class="inventory-tools">
+        <input type="search" id="search" placeholder="Search items" aria-label="Search items">
+        <div class="filters" id="filters"></div>
+        <button class="btn btn-primary" data-action="item-add">+ Add item</button>
+      </div>
+      <div class="cards" id="cards" tabindex="-1"></div>
+      <p class="no-results" id="no-results" hidden></p>
+    </section>
+  </main>
+
+  <dialog id="item-dialog">
+    <form id="item-form" novalidate>
+      <h2 id="item-dialog-title">Add item</h2>
+      <label class="field">Name
+        <input name="name" required maxlength="60">
+      </label>
+      <label class="field">Short description
+        <input name="description" maxlength="100">
+      </label>
+      <div class="field-row">
+        <label class="field">Category
+          <input name="category" list="category-list" required maxlength="30">
+          <datalist id="category-list"></datalist>
+        </label>
+        <label class="field" id="owned-field">How many you own
+          <input name="ownedQty" type="number" min="1" step="1" required>
+        </label>
+      </div>
+      <label class="field check">
+        <input name="isCube" type="checkbox">
+        This is a packing cube that holds other items
+      </label>
+      <label class="field" id="cube-capacity">Holds (L)
+        <input name="capacityL" type="number" min="0" step="any">
+      </label>
+      <div class="field-row">
+        <label class="field">Weight (kg)
+          <input name="weightKg" type="number" min="0" step="any" required>
+        </label>
+        <label class="field" id="volume-label">Packed volume (L)
+          <input name="volumeL" type="number" min="0" step="any" required>
+        </label>
+      </div>
+      <fieldset class="field">
+        <legend>Dimensions in cm (optional)</legend>
+        <p class="hint">Fill these in for rigid or long items, and the volume is calculated for you. You can still type over it. Skip them for soft items like clothes.</p>
+        <div class="field-row three">
+          <input name="dimL" type="number" min="0" step="any" placeholder="Length" aria-label="Length in cm">
+          <input name="dimW" type="number" min="0" step="any" placeholder="Width" aria-label="Width in cm">
+          <input name="dimH" type="number" min="0" step="any" placeholder="Height" aria-label="Height in cm">
+        </div>
+      </fieldset>
+      <label class="field check" id="carry-on-field">
+        <input name="carryOnOnly" type="checkbox">
+        Carry-on only, such as electronics and batteries
+      </label>
+      <div class="field">
+        <span id="icon-label">Icon</span>
+        <div class="icon-picker" id="icon-picker" role="radiogroup" aria-labelledby="icon-label"></div>
+      </div>
+      <div class="field">
+        <span>Photo (optional, replaces the icon)</span>
+        <div class="photo-row">
+          <div class="photo-preview" id="photo-preview"></div>
+          <input type="file" id="photo-input" accept="image/*" aria-label="Choose a photo">
+          <button type="button" class="btn" id="photo-remove">Remove photo</button>
+        </div>
+      </div>
+      <p class="form-error" id="item-error" role="alert"></p>
+      <div class="dialog-actions">
+        <button type="button" class="btn btn-danger" id="item-delete">Delete item</button>
+        <span class="spacer"></span>
+        <button type="button" class="btn" data-action="dialog-close">Cancel</button>
+        <button type="submit" class="btn btn-primary">Save</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="bag-dialog">
+    <form id="bag-form" novalidate>
+      <h2 id="bag-dialog-title">New bag</h2>
+      <label class="field">Name
+        <input name="name" required maxlength="40">
+      </label>
+      <div class="field-row">
+        <label class="field">Empty weight (kg)
+          <input name="emptyWeightKg" type="number" min="0" step="any" required>
+        </label>
+        <label class="field">Weight limit (kg)
+          <input name="weightLimitKg" type="number" min="0" step="any" required>
+        </label>
+      </div>
+      <label class="field">Capacity (L)
+        <input name="capacityL" type="number" min="0" step="any" required>
+      </label>
+      <fieldset class="field">
+        <legend>Interior size in cm</legend>
+        <p class="hint">Changing these recalculates the capacity. You can still type over it.</p>
+        <div class="field-row three">
+          <input name="dimL" type="number" min="0" step="any" placeholder="Length" aria-label="Length in cm" required>
+          <input name="dimW" type="number" min="0" step="any" placeholder="Width" aria-label="Width in cm" required>
+          <input name="dimH" type="number" min="0" step="any" placeholder="Depth" aria-label="Depth in cm" required>
+        </div>
+      </fieldset>
+      <label class="field check">
+        <input name="isCarryOn" type="checkbox">
+        This is a carry-on bag
+      </label>
+      <p class="form-error" id="bag-error" role="alert"></p>
+      <div class="dialog-actions wrap">
+        <button type="button" class="btn btn-danger" id="bag-delete">Delete everywhere</button>
+        <button type="button" class="btn" id="bag-remove">Remove from trip</button>
+        <span class="spacer"></span>
+        <button type="button" class="btn" data-action="dialog-close">Cancel</button>
+        <button type="submit" class="btn btn-primary">Save</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="bag-picker">
+    <h2>Add a bag to this trip</h2>
+    <div class="bag-picker-list" id="bag-picker-list"></div>
+    <div class="dialog-actions">
+      <button type="button" class="btn" data-action="bag-create">Create a new bag</button>
+      <span class="spacer"></span>
+      <button type="button" class="btn" data-action="dialog-close">Close</button>
+    </div>
+  </dialog>
+
+  <dialog id="name-dialog">
+    <form id="name-form" novalidate>
+      <h2 id="name-title"></h2>
+      <label class="field">Trip name
+        <input name="name" required maxlength="60">
+      </label>
+      <p class="form-error" id="name-error" role="alert"></p>
+      <div class="dialog-actions">
+        <span class="spacer"></span>
+        <button type="button" class="btn" data-action="dialog-close">Cancel</button>
+        <button type="submit" class="btn btn-primary">Save</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="confirm-dialog">
+    <h2 id="confirm-title"></h2>
+    <p id="confirm-text"></p>
+    <div class="dialog-actions">
+      <span class="spacer"></span>
+      <button type="button" class="btn" id="confirm-cancel">Cancel</button>
+      <button type="button" class="btn btn-danger" id="confirm-ok"></button>
+    </div>
+  </dialog>
+
+  <div class="toast" id="toast" role="status" hidden></div>
+
+  <script src="js/calc.js"></script>
+  <script src="js/seed.js"></script>
+  <script src="js/store.js"></script>
+  <script src="js/drag.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
