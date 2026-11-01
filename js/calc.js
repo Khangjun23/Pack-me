@@ -94,6 +94,80 @@ var Calc = (function () {
     return Math.max(0, owned - packedInTrip(trip, item.id));
   }
 
+  // Kilograms per litre. Items with no volume count as medium density.
+  function density(weightKg, volumeL) {
+    return volumeL > 0 ? weightKg / volumeL : 0.4;
+  }
+
+  // 0 to 1 on a log scale, so feather-light clothes and dense electronics both read clearly.
+  function densityShade(kgPerL) {
+    var low = 0.08;
+    var high = 1.5;
+    var shade = Math.log(Math.max(kgPerL, low) / low) / Math.log(high / low);
+    return Math.round(Math.min(1, shade) * 100) / 100;
+  }
+
+  // The same scale in light and dark themes, so darker always means denser.
+  // Text is black or white, whichever stays readable on that shade.
+  function densityColors(shade) {
+    var pale = [251, 243, 230];
+    var deep = [122, 38, 14];
+    var rgb = pale.map(function (channel, i) {
+      return Math.round(channel + (deep[i] - channel) * shade);
+    });
+    var linear = rgb.map(function (channel) {
+      var c = channel / 255;
+      return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+    });
+    var luminance = 0.2126 * linear[0] + 0.7152 * linear[1] + 0.0722 * linear[2];
+    return {
+      background: 'rgb(' + rgb.join(',') + ')',
+      text: luminance > 0.18 ? '#000' : '#fff',
+      luminance: luminance
+    };
+  }
+
+  function densityLabel(kgPerL) {
+    if (kgPerL < 0.3) return 'light for its size';
+    return kgPerL < 0.7 ? 'medium density' : 'dense for its size';
+  }
+
+  // Grid tracks for a box in the open bag. The box's area matches the item's share
+  // of the bag's capacity, but never gets too small to show its full name and details.
+  var CELL_PITCH = 16;
+  var CELL_GAP = 4;
+  var MIN_COLS = 6;
+  var MIN_ICON = 22;
+  var MAX_ICON = 56;
+  var LAYOUT_EFFICIENCY = 0.9;
+
+  function textLines(length, charPx, innerWidth) {
+    var lines = Math.max(1, Math.ceil(length * charPx / innerWidth));
+    return lines > 1 ? lines + 1 : lines; // Word wrapping rarely fills every line.
+  }
+
+  function tileSize(options) {
+    var maxCols = Math.max(MIN_COLS, Math.floor((options.widthPx + CELL_GAP) / CELL_PITCH));
+    var share = options.capacityL > 0 ? options.volumeL / options.capacityL : 0;
+    var area = options.widthPx * options.heightPx * share * LAYOUT_EFFICIENCY;
+    var cols = Math.round((Math.sqrt(area * 1.35) + CELL_GAP) / CELL_PITCH);
+    cols = Math.min(maxCols, Math.max(MIN_COLS, cols));
+    var width = cols * CELL_PITCH - CELL_GAP;
+
+    var inner = width - 12;
+    var textHeight = 14 + textLines(options.name.length, 6.3, inner) * 15 +
+      textLines(options.detail.length, 5.6, inner) * 14 + (options.extraPx || 0);
+    var height = Math.max(area / width, textHeight + MIN_ICON);
+    var rows = Math.ceil((height + CELL_GAP) / CELL_PITCH);
+    var finalHeight = rows * CELL_PITCH - CELL_GAP;
+
+    return {
+      cols: cols,
+      rows: rows,
+      iconPx: Math.round(Math.max(MIN_ICON, Math.min(MAX_ICON, finalHeight - textHeight, width * 0.4)))
+    };
+  }
+
   function worst(levels) {
     if (levels.indexOf('over') !== -1) return 'over';
     return levels.indexOf('warn') !== -1 ? 'warn' : 'ok';
@@ -208,6 +282,11 @@ var Calc = (function () {
     carryOnBlocked: carryOnBlocked,
     packedInTrip: packedInTrip,
     remaining: remaining,
+    density: density,
+    densityShade: densityShade,
+    densityColors: densityColors,
+    densityLabel: densityLabel,
+    tileSize: tileSize,
     cubeTotals: cubeTotals,
     cubeBagId: cubeBagId,
     looseCubeIds: looseCubeIds,

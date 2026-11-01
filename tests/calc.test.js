@@ -167,6 +167,57 @@ check('loose cubes found', C.looseCubeIds(cubeTrip, cubeItems2), ['loose']);
 check('empty loose cubes are ignored', C.looseCubeIds({ bagIds: [], packed: {}, cubes: { loose: {} } }, cubeItems2), []);
 check('trip total includes cubes everywhere', C.tripWeightKg(cubeTrip, cubeBags, cubeItems2), 7.08);
 
+// Density
+check('density is kg per litre', C.density(1.6, 2), 0.8);
+check('no volume counts as medium', C.densityLabel(C.density(1, 0)), 'medium density');
+check('fleece reads light', C.densityLabel(C.density(0.5, 5)), 'light for its size');
+check('laptop reads dense', C.densityLabel(C.density(1.6, 1.5)), 'dense for its size');
+check('shade floor', C.densityShade(0.01), 0);
+check('shade ceiling', C.densityShade(5), 1);
+check('denser is darker', C.densityShade(1) > C.densityShade(0.2), true);
+
+check('MT100 jacket is the palest shade', C.densityShade(C.density(0.32, 4)), 0);
+var lastLuminance = 2;
+var darkensSteadily = true;
+var readable = true;
+for (var step = 0; step <= 100; step++) {
+  var colors = C.densityColors(step / 100);
+  if (colors.luminance >= lastLuminance) darkensSteadily = false;
+  lastLuminance = colors.luminance;
+  var textLuminance = colors.text === '#000' ? 0 : 1;
+  var contrast = (Math.max(colors.luminance, textLuminance) + 0.05) / (Math.min(colors.luminance, textLuminance) + 0.05);
+  if (contrast < 4.5) readable = false;
+}
+check('higher density is always darker', darkensSteadily, true);
+check('text stays readable on every shade', readable, true);
+
+// Box sizes
+function tile(volumeL, name, capacityL, widthPx, heightPx) {
+  return C.tileSize({
+    volumeL: volumeL,
+    capacityL: capacityL || 40,
+    widthPx: widthPx || 490,
+    heightPx: heightPx || 380,
+    name: name || 'Item',
+    detail: '0.5 kg · 1 L'
+  });
+}
+function area(s) {
+  return (s.cols * 16 - 4) * (s.rows * 16 - 4);
+}
+check('bigger items get bigger boxes', area(tile(12)) > area(tile(6)), true);
+var twelve = area(tile(12));
+var six = area(tile(6));
+check('area roughly follows volume', twelve / six > 1.7 && twelve / six < 2.3, true);
+check('share of the bag is about right', Math.abs(area(tile(12)) / (490 * 380) - 0.27) < 0.05, true);
+check('same volume looks bigger in a smaller container', area(tile(4, 'Item', 5.4)) > area(tile(4, 'Item', 40)), true);
+check('tiny items keep a minimum width', tile(0.1).cols, 6);
+check('no volume keeps a minimum width', tile(0).cols, 6);
+check('no capacity is safe', tile(1, 'Item', 0).cols, 6);
+check('long names get taller boxes', tile(0.2, 'Columbia Silver Ridge Utility II shirt').rows > tile(0.2, 'Cap').rows, true);
+check('boxes never exceed the container width', tile(500).cols <= Math.floor((490 + 4) / 16), true);
+check('icon stays in range', tile(40).iconPx <= 56 && tile(0.1).iconPx >= 22, true);
+
 // Formatting
 check('format trims zeros', C.fmt(3.5), '3.5');
 check('format rounds to two decimals', C.fmt(1.2345), '1.23');

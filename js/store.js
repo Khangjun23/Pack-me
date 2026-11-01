@@ -147,7 +147,14 @@ var Store = (function () {
       update.keys.forEach(function (key) {
         var updated = clone(seedItems['item-' + key]);
         var existing = find(result, updated.id);
-        if (existing && existing.photo) updated.photo = existing.photo;
+        if (existing && update.fields) {
+          // A partial update changes only the named fields.
+          var merged = clone(existing);
+          update.fields.forEach(function (field) { merged[field] = updated[field]; });
+          updated = merged;
+        } else if (existing && existing.photo) {
+          updated.photo = existing.photo;
+        }
         upsert(result, updated);
       });
     });

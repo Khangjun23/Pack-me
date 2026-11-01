@@ -188,6 +188,15 @@ input, select {
 .status li[data-level="warn"] { color: var(--warn); }
 .status li[data-level="over"] { color: var(--over); }
 
+.box-legend { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; color: var(--muted); font-size: 12px; }
+.legend-scale {
+  width: 44px;
+  height: 10px;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  background: linear-gradient(90deg, rgb(251, 243, 230), rgb(122, 38, 14));
+}
+
 /* Suitcase */
 .suitcase {
   position: relative;
@@ -292,11 +301,14 @@ input, select {
   max-height: 100%;
   padding: 10px;
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(76px, 1fr));
-  grid-auto-rows: max-content;
+  grid-template-columns: repeat(auto-fill, 12px);
+  grid-auto-rows: 12px;
+  grid-auto-flow: dense;
   align-content: start;
-  gap: 8px;
+  justify-content: start;
+  gap: 4px;
   overflow-y: auto;
+  scrollbar-gutter: stable;
   outline: none;
 }
 .suitcase.is-cube { padding-top: 0; }
@@ -310,6 +322,7 @@ input, select {
 
 .empty-hint {
   grid-column: 1 / -1;
+  grid-row: span 8;
   align-self: center;
   margin-top: 60px;
   color: var(--muted);
@@ -319,10 +332,14 @@ input, select {
 
 .chip {
   position: relative;
-  padding: 7px 4px 5px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+  padding: 6px;
   border: 1px solid var(--line);
   border-radius: 9px;
-  background: var(--surface);
   box-shadow: 0 1px 3px rgba(50, 35, 10, .2);
   text-align: center;
   cursor: grab;
@@ -331,12 +348,11 @@ input, select {
   -webkit-user-select: none;
 }
 .chip[data-problem="true"] { border-color: var(--over); box-shadow: 0 0 0 1px var(--over); }
-.chip-media { display: block; height: 34px; font-size: 26px; line-height: 34px; }
-.chip-media img { width: 34px; height: 34px; border-radius: 6px; object-fit: cover; vertical-align: top; }
-.chip-name { display: block; overflow: hidden; font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
-.chip-cube { grid-column: span 2; }
-.chip-detail { display: block; color: var(--muted); font-size: 11px; }
-.chip-open { margin-top: 4px; padding: 1px 12px; font-size: 12px; }
+.chip-media { display: block; flex: none; font-size: var(--icon, 26px); line-height: 1.05; }
+.chip-media img { display: block; width: var(--icon, 26px); height: var(--icon, 26px); border-radius: 6px; object-fit: cover; }
+.chip-name { display: block; max-width: 100%; font-size: 11.5px; font-weight: 600; line-height: 15px; overflow-wrap: anywhere; }
+.chip-detail { display: block; max-width: 100%; font-size: 10.5px; line-height: 14px; font-variant-numeric: tabular-nums; }
+.chip-open { flex: none; margin-top: 3px; padding: 1px 12px; color: var(--ink); font-size: 12px; line-height: 18px; }
 .chip-qty {
   position: absolute;
   top: -5px;
@@ -358,12 +374,12 @@ input, select {
   border: 0;
   border-radius: 50%;
   background: transparent;
-  color: var(--muted);
+  color: inherit;
   font-size: 14px;
   line-height: 1;
   cursor: pointer;
 }
-.chip-remove:hover { background: var(--surface-2); color: var(--over); }
+.chip-remove:hover { background: #fff; color: #b3261e; }
 .chip.pop { animation: pop .34s cubic-bezier(.3, 1.6, .5, 1); }
 @keyframes pop {
   from { transform: scale(.55); }

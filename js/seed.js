@@ -8,7 +8,7 @@ var Seed = (function () {
 
   // Bump DATA_VERSION when starter records change. Saved data below a version
   // gets that version's records once, on load (see Store.normalize).
-  var DATA_VERSION = 7;
+  var DATA_VERSION = 8;
   var OWNED = { usbc: 3, socks: 2, pole: 2, tshirt: 7, drifit: 7, workoutshorts: 5, underwear: 10 };
   var ITEM_UPDATES = [
     { version: 2, keys: ['camera', 'lens', 'charger', 'usbc', 'tripod', 'djinano', 'mt66', 'headphones', 'bottle',
@@ -18,7 +18,8 @@ var Seed = (function () {
       'extrawarmbottom', 'ultrawarmtop', 'ultrawarmbottom'] },
     { version: 6, keys: ['halfmoon1', 'halfmoon2', 'cubel1', 'cubel2', 'cubes1', 'cubes2', 'cubes3', 'cubes4'] },
     { version: 7, keys: ['tshirt', 'drifit', 'silverridgeshirt', 'workoutshorts', 'underwear', 'puffer', 'thpuffer',
-      'sneakers', 'techamphibian'] }
+      'sneakers', 'techamphibian'] },
+    { version: 8, keys: ['thpuffer'], fields: ['name', 'description'] }
   ];
   // The bag packs these replaced by individual cubes in version 6.
   var REMOVED_IN_V6 = ['item-halfmoon', 'item-travelbags'];
@@ -70,7 +71,7 @@ var Seed = (function () {
     item('sweater', 'Sweater', 'Warm knit layer', 'Clothes', 0.5, 4, '🧥'),
     item('jacket', 'Kathmandu Trailhead jacket', 'Stretch 2.5-layer rain jacket', 'Clothes', 0.3, 2, '🧥'),
     item('puffer', 'Forclaz MT100 down jacket', 'Water-repellent, hooded, to -5°C', 'Clothes', 0.32, 4, '🧥'),
-    item('thpuffer', 'Tommy Hilfiger puffer', 'Larger hooded puffer', 'Clothes', 1.1, 12, '🧥'),
+    item('thpuffer', 'Tommy Hilfiger Classic Hoody puffer', 'Model 156AN122, polyester fill', 'Clothes', 1.1, 12, '🧥'),
     item('fasttrek', 'Columbia Fast Trek II fleece', 'Full-zip microfleece, size L', 'Clothes', 0.545, 5, '🧥'),
     item('glacier', 'North Face TKA Glacier fleece', '100-weight 1/4-zip fleece', 'Clothes', 0.215, 2.5, '🧥'),
     item('socks', 'Kathmandu NuYarn socks', 'Ergonomic hike socks, per pair', 'Clothes', 0.088, 0.4, '🧦'),

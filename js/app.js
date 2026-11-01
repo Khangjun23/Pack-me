@@ -128,28 +128,40 @@
     var fillPct = bag.capacityL > 0 ? Math.min(100, result.volumeL / bag.capacityL * 100) : 0;
     $('fill').style.height = 'calc((100% - 18px) * ' + fillPct / 100 + ')';
 
-    renderPacked(packed, items, result);
+    renderPacked(packed, items, result, bag.capacityL);
   }
 
-  function renderPacked(packed, items, result) {
+  function renderPacked(packed, items, result, capacityL) {
     var problems = {};
     result.oversized.forEach(function (o) { problems[o.item.id] = true; });
     result.misplaced.forEach(function (item) { problems[item.id] = true; });
     result.overfull.forEach(function (o) { problems[o.item.id] = true; });
-    var chips = Store.state.items.filter(function (item) { return packed[item.id] > 0; }).map(function (item) {
-      var qty = packed[item.id];
-      if (item.cube === true) return cubeChip(item, items, problems);
-      return '<div class="chip" data-drag="packed" data-id="' + esc(item.id) + '" data-problem="' + (problems[item.id] === true) + '"' +
-        ' title="' + esc(item.name) + ', ' + fmt(item.weightKg) + ' kg, ' + fmt(item.volumeL) + ' L. Drag out to remove.">' +
-        (qty > 1 ? '<span class="chip-qty">x' + qty + '</span>' : '') +
-        '<button class="chip-remove" data-action="unpack" data-id="' + esc(item.id) + '" data-fk="unpack-' + esc(item.id) + '" aria-label="Remove one ' + esc(item.name) + '">×</button>' +
-        '<span class="chip-media">' + media(item) + '</span>' +
-        '<span class="chip-name">' + esc(item.name) + '</span>' +
-        '</div>';
-    });
-    var html = chips.join('') || '<p class="empty-hint">Drag items here to pack them</p>';
 
     var container = $('packed');
+    var styles = getComputedStyle(container);
+    var box = {
+      width: container.clientWidth - parseFloat(styles.paddingLeft) - parseFloat(styles.paddingRight),
+      height: container.clientHeight - parseFloat(styles.paddingTop) - parseFloat(styles.paddingBottom)
+    };
+    var cubes = Store.trip().cubes;
+
+    // Biggest first, which leaves the fewest gaps in the grid.
+    var tiles = Store.state.items.filter(function (item) { return packed[item.id] > 0; }).map(function (item) {
+      var qty = packed[item.id];
+      var cube = item.cube === true ? Calc.cubeTotals(item, cubes[item.id], items) : null;
+      return {
+        item: item,
+        qty: qty,
+        cube: cube,
+        weightKg: cube ? cube.weightKg : item.weightKg * qty,
+        volumeL: cube ? cube.volumeL : item.volumeL * qty
+      };
+    }).sort(function (a, b) { return b.volumeL - a.volumeL; });
+
+    var html = tiles.map(function (tile) {
+      return tileHTML(tile, capacityL, box, problems);
+    }).join('') || '<p class="empty-hint">Drag items here to pack them</p>';
+
     setHTML(container, html);
 
     if (ui.justPacked) {
@@ -159,15 +171,37 @@
     }
   }
 
-  function cubeChip(cube, items, problems) {
-    var totals = Calc.cubeTotals(cube, Store.trip().cubes[cube.id], items);
-    return '<div class="chip chip-cube" data-drag="packed" data-id="' + esc(cube.id) + '" data-problem="' + (problems[cube.id] === true) + '"' +
-      ' title="' + esc(cube.name) + '. Drag out to take it out of the bag. What is inside stays in the cube.">' +
-      '<button class="chip-remove" data-action="unpack" data-id="' + esc(cube.id) + '" data-fk="unpack-' + esc(cube.id) + '" aria-label="Take ' + esc(cube.name) + ' out of the bag">×</button>' +
-      '<span class="chip-media">' + media(cube) + '</span>' +
-      '<span class="chip-name">' + esc(cube.name) + '</span>' +
-      '<span class="chip-detail">' + totals.count + (totals.count === 1 ? ' item · ' : ' items · ') + fmt(totals.weightKg) + ' kg · ' + fmt(totals.volumeL) + ' L</span>' +
-      '<button class="btn chip-open" data-action="cube-select" data-id="' + esc(cube.id) + '">Open</button>' +
+  // A box sized by volume and shaded by density.
+  function tileHTML(tile, capacityL, box, problems) {
+    var item = tile.item;
+    var name = esc(item.name);
+    var detail = fmt(tile.weightKg) + ' kg · ' + fmt(tile.volumeL) + ' L';
+    if (tile.cube) detail = tile.cube.count + (tile.cube.count === 1 ? ' item · ' : ' items · ') + detail;
+    var size = Calc.tileSize({
+      volumeL: tile.volumeL,
+      capacityL: capacityL,
+      widthPx: box.width,
+      heightPx: box.height,
+      name: item.name,
+      detail: detail,
+      extraPx: tile.cube ? 28 : 0
+    });
+    var density = Calc.density(tile.weightKg, tile.volumeL);
+    var shade = Calc.densityShade(density);
+    var colors = Calc.densityColors(shade);
+    var removeLabel = tile.cube ? 'Take ' + name + ' out of the bag' : 'Remove one ' + name;
+    var hint = tile.cube ? 'Drag out to take it out of the bag. What is inside stays in the cube.' : 'Drag out to remove.';
+    return '<div class="chip" data-drag="packed" data-id="' + esc(item.id) + '" data-problem="' + (problems[item.id] === true) + '"' +
+      ' data-cols="' + size.cols + '" data-rows="' + size.rows + '" data-shade="' + shade + '"' +
+      ' style="grid-column:span ' + size.cols + ';grid-row:span ' + size.rows +
+      ';background:' + colors.background + ';color:' + colors.text + ';--icon:' + size.iconPx + 'px"' +
+      ' title="' + name + ', ' + detail + ', ' + Calc.densityLabel(density) + '. ' + hint + '">' +
+      (tile.qty > 1 ? '<span class="chip-qty">x' + tile.qty + '</span>' : '') +
+      '<button class="chip-remove" data-action="unpack" data-id="' + esc(item.id) + '" data-fk="unpack-' + esc(item.id) + '" aria-label="' + removeLabel + '">×</button>' +
+      '<span class="chip-media">' + media(item) + '</span>' +
+      '<span class="chip-name">' + name + '</span>' +
+      '<span class="chip-detail">' + detail + '</span>' +
+      (tile.cube ? '<button class="btn chip-open" data-action="cube-select" data-id="' + esc(item.id) + '">Open</button>' : '') +
       '</div>';
   }
 
@@ -782,6 +816,8 @@
   });
   Store.subscribe(render);
   Store.load();
+  // Box sizes depend on the space available, so they follow the window.
+  new ResizeObserver(function () { renderBag(); }).observe($('packed'));
   Drag.init({
     dropZone: function () { return $('suitcase'); },
     flyTarget: flyTarget,
