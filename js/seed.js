@@ -136,9 +136,10 @@ var Seed = (function () {
         cubes: {}
       }],
       activeTripId: 'trip-first',
+      theme: 'auto',
       dataVersion: DATA_VERSION
     }));
   }
 
-  return { ICONS: ICONS, DATA_VERSION: DATA_VERSION, ITEM_UPDATES: ITEM_UPDATES, REMOVED_IN_V6: REMOVED_IN_V6, state: state };
+  return { ICONS: ICONS, THEMES: ['auto', 'sky', 'navy', 'sage', 'wine', 'black', 'white'], DATA_VERSION: DATA_VERSION, ITEM_UPDATES: ITEM_UPDATES, REMOVED_IN_V6: REMOVED_IN_V6, state: state };
 })();

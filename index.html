@@ -19,6 +19,16 @@
     </div>
     <p class="trip-total" id="trip-total"></p>
     <div class="backup-controls">
+      <label for="theme-select">Theme</label>
+      <select id="theme-select">
+        <option value="auto">Automatic</option>
+        <option value="sky">Sky blue</option>
+        <option value="navy">Dark blue</option>
+        <option value="sage">Sage green</option>
+        <option value="wine">Wine red</option>
+        <option value="black">Black</option>
+        <option value="white">White</option>
+      </select>
       <button class="btn" data-action="export">Export</button>
       <button class="btn" data-action="import">Import</button>
       <input type="file" id="import-file" accept="application/json,.json" hidden>

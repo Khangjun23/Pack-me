@@ -123,6 +123,7 @@ var Store = (function () {
       bags: bags,
       trips: trips,
       activeTripId: tripExists ? raw.activeTripId : trips[0].id,
+      theme: Seed.THEMES.indexOf(raw.theme) !== -1 ? raw.theme : 'auto',
       dataVersion: Seed.DATA_VERSION
     };
   }
@@ -394,6 +395,11 @@ var Store = (function () {
       if (state.trips.length < 2) return;
       state.trips = state.trips.filter(function (t) { return t.id !== state.activeTripId; });
       state.activeTripId = state.trips[0].id;
+      commit();
+    },
+
+    setTheme: function (theme) {
+      state.theme = theme;
       commit();
     },
 

@@ -43,7 +43,15 @@
 
   // ----- Rendering -----
 
+  function applyTheme() {
+    var theme = Store.state.theme;
+    if (theme === 'auto') document.documentElement.removeAttribute('data-theme');
+    else document.documentElement.setAttribute('data-theme', theme);
+    $('theme-select').value = theme;
+  }
+
   function render() {
+    applyTheme();
     renderTopbar();
     renderTabs();
     renderBag();
@@ -812,6 +820,7 @@
   });
 
   $('trip-select').addEventListener('change', function (e) { Store.setActiveTrip(e.target.value); });
+  $('theme-select').addEventListener('change', function (e) { Store.setTheme(e.target.value); });
   $('search').addEventListener('input', function (e) {
     ui.search = e.target.value;
     render();
