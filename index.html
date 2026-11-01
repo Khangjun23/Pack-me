@@ -29,6 +29,7 @@
         <option value="black">Black</option>
         <option value="white">White</option>
       </select>
+      <button class="btn" data-action="checklist-open">Checklist</button>
       <button class="btn" data-action="export">Export</button>
       <button class="btn" data-action="import">Import</button>
       <input type="file" id="import-file" accept="application/json,.json" hidden>
@@ -237,6 +238,26 @@
         <button type="submit" class="btn btn-primary">Save</button>
       </div>
     </form>
+  </dialog>
+
+  <dialog id="checklist-dialog">
+    <h2 id="checklist-title"></h2>
+    <p class="checklist-empty" id="checklist-empty" hidden>Nothing is packed for this trip yet. Pack some items, then come back.</p>
+    <div id="checklist-ready">
+      <div class="checklist-preview" id="checklist-preview" tabindex="0"></div>
+      <ol class="checklist-steps">
+        <li>Click <b>Download for Notes</b>.</li>
+        <li>In Notes on your Mac, choose <b>File &gt; Import Markdown</b> and pick the file. This needs macOS 26 or later.</li>
+        <li>If the items arrive without tick boxes, select them and click the <b>Checklist</b> button in Notes. <b>Copy as text</b> also works: paste it into a note, then do the same.</li>
+      </ol>
+      <p class="form-error" id="checklist-message" role="status"></p>
+    </div>
+    <div class="dialog-actions wrap">
+      <button type="button" class="btn" data-action="checklist-copy" id="checklist-copy">Copy as text</button>
+      <button type="button" class="btn btn-primary" data-action="checklist-download" id="checklist-download">Download for Notes</button>
+      <span class="spacer"></span>
+      <button type="button" class="btn" data-action="dialog-close">Close</button>
+    </div>
   </dialog>
 
   <dialog id="confirm-dialog">

@@ -727,6 +727,25 @@ dialog h2 { margin-bottom: 14px; font-family: Georgia, "Times New Roman", serif;
 }
 .bag-option small { display: block; color: var(--muted); }
 
+/* Checklist */
+.checklist-preview {
+  max-height: 42vh;
+  overflow-y: auto;
+  padding: 2px 12px 10px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--bg);
+}
+.checklist-preview h3 { margin: 12px 0 4px; font-size: 15px; }
+.checklist-preview h4 { margin: 8px 0 2px; color: var(--muted); font-size: 13px; }
+.checklist-preview ul { margin: 0; padding: 0; list-style: none; }
+.checklist-preview li { padding: 2px 0; overflow-wrap: anywhere; }
+.checklist-preview li::before { content: "☐"; margin-right: 7px; color: var(--muted); }
+.checklist-steps { margin: 12px 0 4px; padding-left: 20px; color: var(--muted); font-size: 13px; }
+.checklist-steps li { margin-bottom: 4px; }
+.checklist-steps b { color: var(--ink); }
+#checklist-message { margin: 8px 0 0; color: var(--ok); }
+
 /* Toast */
 .toast {
   position: fixed;

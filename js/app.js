@@ -718,18 +718,83 @@
     $('bag-picker').showModal();
   }
 
+  // ----- Checklist -----
+
+  function currentChecklist() {
+    return Calc.checklist(Store.trip(), Store.bagsById(), Store.itemsById());
+  }
+
+  function openChecklist() {
+    var list = currentChecklist();
+    var hasItems = list.sections.length > 0;
+    function items(lines) {
+      return lines.length ? '<ul>' + lines.map(function (line) { return '<li>' + esc(line) + '</li>'; }).join('') + '</ul>' : '';
+    }
+    $('checklist-title').textContent = list.title + ' checklist';
+    $('checklist-empty').hidden = hasItems;
+    $('checklist-ready').hidden = !hasItems;
+    $('checklist-copy').hidden = !hasItems;
+    $('checklist-download').hidden = !hasItems;
+    $('checklist-message').textContent = '';
+    $('checklist-preview').innerHTML = list.sections.map(function (section) {
+      return '<h3>' + esc(section.title) + '</h3>' + items(section.lines) +
+        section.cubes.map(function (cube) { return '<h4>' + esc(cube.title) + '</h4>' + items(cube.lines); }).join('');
+    }).join('');
+    $('checklist-dialog').showModal();
+  }
+
+  function downloadChecklist() {
+    var list = currentChecklist();
+    var name = list.title.replace(/[\\/:*?"<>|]/g, '-').trim() || 'Trip';
+    downloadFile(name + ' packing list.md', Calc.checklistMarkdown(list), 'text/markdown');
+    $('checklist-message').textContent = 'Downloaded. Now import it from File > Import Markdown in Notes.';
+  }
+
+  // The older copy route still works where the clipboard API is not available to local files.
+  function copyWithSelection(text) {
+    var area = document.createElement('textarea');
+    area.value = text;
+    area.setAttribute('readonly', '');
+    area.style.position = 'fixed';
+    area.style.opacity = '0';
+    $('checklist-dialog').appendChild(area);
+    area.select();
+    var copied = false;
+    try { copied = document.execCommand('copy'); } catch (err) { copied = false; }
+    area.remove();
+    return copied;
+  }
+
+  function copyChecklist() {
+    var text = Calc.checklistText(currentChecklist());
+    function report(copied) {
+      $('checklist-message').textContent = copied
+        ? 'Copied. Paste it into a note, select the items, and click the Checklist button in Notes.'
+        : 'Your browser blocked copying. Use Download for Notes instead.';
+    }
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(function () { report(true); }, function () { report(copyWithSelection(text)); });
+    } else {
+      report(copyWithSelection(text));
+    }
+  }
+
   // ----- Backups -----
 
-  function exportBackup() {
-    var blob = new Blob([Store.exportJSON()], { type: 'application/json' });
+  function downloadFile(filename, contents, type) {
+    var blob = new Blob([contents], { type: type });
     var url = URL.createObjectURL(blob);
     var link = document.createElement('a');
     link.href = url;
-    link.download = 'packing-backup-' + new Date().toISOString().slice(0, 10) + '.json';
+    link.download = filename;
     document.body.appendChild(link);
     link.click();
     link.remove();
     setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+  }
+
+  function exportBackup() {
+    downloadFile('packing-backup-' + new Date().toISOString().slice(0, 10) + '.json', Store.exportJSON(), 'application/json');
   }
 
   function importBackup(file) {
@@ -809,6 +874,9 @@
         if (yes) Store.deleteTrip();
       });
     },
+    'checklist-open': openChecklist,
+    'checklist-download': downloadChecklist,
+    'checklist-copy': copyChecklist,
     'export': exportBackup,
     'import': function () { $('import-file').click(); },
     'dialog-close': function (el) { el.closest('dialog').close(); }

@@ -312,6 +312,77 @@ var Calc = (function () {
     };
   }
 
+  // The trip as a list to tick off: one section per bag, with each packed cube's
+  // contents grouped under it, and any filled cubes not yet in a bag at the end.
+  function checklist(trip, bagsById, itemsById) {
+    var order = Object.keys(itemsById);
+    function entries(packed) {
+      return order.filter(function (id) { return packed && packed[id] > 0; }).map(function (id) {
+        return { item: itemsById[id], qty: packed[id] };
+      });
+    }
+    function label(entry) {
+      return entry.item.name + (entry.qty > 1 ? ' x' + entry.qty : '');
+    }
+    function cubeGroup(cubeId) {
+      return { title: itemsById[cubeId].name, lines: entries(trip.cubes && trip.cubes[cubeId]).map(label) };
+    }
+
+    var sections = [];
+    trip.bagIds.forEach(function (bagId) {
+      var section = { title: bagsById[bagId] ? bagsById[bagId].name : '', lines: [], cubes: [] };
+      entries(trip.packed[bagId]).forEach(function (entry) {
+        if (entry.item.cube !== true) {
+          section.lines.push(label(entry));
+          return;
+        }
+        var group = cubeGroup(entry.item.id);
+        if (group.lines.length) section.cubes.push(group);
+        else section.lines.push(entry.item.name + ' (empty)');
+      });
+      if (section.lines.length || section.cubes.length) sections.push(section);
+    });
+
+    var loose = order.filter(function (id) {
+      return looseCubeIds(trip, itemsById).indexOf(id) !== -1;
+    }).map(cubeGroup);
+    if (loose.length) sections.push({ title: 'Cubes not in a bag yet', lines: [], cubes: loose });
+    return { title: trip.name, sections: sections };
+  }
+
+  function escapeMarkdown(text) {
+    return text.replace(/[\\`*_[\]<>#]/g, '\\$&');
+  }
+
+  function checklistMarkdown(list) {
+    function items(lines) {
+      return lines.map(function (line) { return '- [ ] ' + escapeMarkdown(line); }).join('\n') + '\n';
+    }
+    var parts = ['# ' + escapeMarkdown(list.title) + ' packing list\n'];
+    list.sections.forEach(function (section) {
+      parts.push('## ' + escapeMarkdown(section.title) + '\n');
+      if (section.lines.length) parts.push(items(section.lines));
+      section.cubes.forEach(function (cube) {
+        parts.push('### ' + escapeMarkdown(cube.title) + '\n');
+        parts.push(items(cube.lines));
+      });
+    });
+    return parts.join('\n');
+  }
+
+  function checklistText(list) {
+    var parts = [list.title + ' packing list'];
+    list.sections.forEach(function (section) {
+      parts.push('', section.title);
+      parts = parts.concat(section.lines);
+      section.cubes.forEach(function (cube) {
+        parts.push('', cube.title);
+        parts = parts.concat(cube.lines);
+      });
+    });
+    return parts.join('\n') + '\n';
+  }
+
   // Every bag on the trip, including the weight of the bags themselves, plus
   // filled cubes that have not been put in a bag yet.
   function tripWeightKg(trip, bagsById, itemsById) {
@@ -347,6 +418,9 @@ var Calc = (function () {
     shadeColors: shadeColors,
     densityLabel: densityLabel,
     makeRoom: makeRoom,
+    checklist: checklist,
+    checklistMarkdown: checklistMarkdown,
+    checklistText: checklistText,
     tileSize: tileSize,
     cubeTotals: cubeTotals,
     cubeBagId: cubeBagId,

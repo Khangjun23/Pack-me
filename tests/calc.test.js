@@ -275,6 +275,33 @@ check('no weight limit means no weight section', C.makeRoom({ noun: 'cube', empt
 check('open cube over volume gets a list', C.makeRoom({ noun: 'cube', emptyWeightKg: 0.1, capacityL: 5, weightLimitKg: Infinity, isCarryOn: true }, { fleece: 2 }, roomItems).volume.overBy, 5);
 check('bag over only from its own weight has no rows', C.makeRoom({ emptyWeightKg: 6, capacityL: 40, weightLimitKg: 5 }, {}, roomItems).weight.rows, []);
 
+// Checklist
+var listItems = {
+  shirt: { id: 'shirt', name: 'Shirt', weightKg: 0.16, volumeL: 1 },
+  laptop: { id: 'laptop', name: 'Laptop', weightKg: 1.6, volumeL: 1.5 },
+  fleece: { id: 'fleece', name: 'Fleece', weightKg: 0.5, volumeL: 5 },
+  cube: { id: 'cube', name: 'Cube A', cube: true, weightKg: 0.08, volumeL: 0.2, capacityL: 12 },
+  spare: { id: 'spare', name: 'Cube B', cube: true, weightKg: 0.06, volumeL: 0.1, capacityL: 5 },
+  loose: { id: 'loose', name: 'Cube C', cube: true, weightKg: 0.06, volumeL: 0.1, capacityL: 5 },
+  odd: { id: 'odd', name: 'Odd *name* [x] #1', weightKg: 0.1, volumeL: 0.1 }
+};
+var listBags = { a: { name: 'Carry-on' }, b: { name: 'Checked' }, c: { name: 'Daypack' } };
+var listTrip = {
+  name: 'Japan',
+  bagIds: ['a', 'b', 'c'],
+  packed: { a: { laptop: 1, shirt: 3, cube: 1, spare: 1 }, b: { odd: 1 }, c: {} },
+  cubes: { cube: { fleece: 2 }, loose: { shirt: 1 } }
+};
+var list = C.checklist(listTrip, listBags, listItems);
+check('sections skip empty bags', list.sections.map(function (x) { return x.title; }), ['Carry-on', 'Checked', 'Cubes not in a bag yet']);
+check('lines follow inventory order with quantities', list.sections[0].lines, ['Shirt x3', 'Laptop', 'Cube B (empty)']);
+check('cube contents grouped', list.sections[0].cubes, [{ title: 'Cube A', lines: ['Fleece x2'] }]);
+check('loose cube listed', list.sections[2].cubes, [{ title: 'Cube C', lines: ['Shirt'] }]);
+check('markdown', C.checklistMarkdown(list), '# Japan packing list\n\n## Carry-on\n\n- [ ] Shirt x3\n- [ ] Laptop\n- [ ] Cube B (empty)\n\n### Cube A\n\n- [ ] Fleece x2\n\n## Checked\n\n- [ ] Odd \\*name\\* \\[x\\] \\#1\n\n## Cubes not in a bag yet\n\n### Cube C\n\n- [ ] Shirt\n');
+check('plain text', C.checklistText(list), 'Japan packing list\n\nCarry-on\nShirt x3\nLaptop\nCube B (empty)\n\nCube A\nFleece x2\n\nChecked\nOdd *name* [x] #1\n\nCubes not in a bag yet\n\nCube C\nShirt\n');
+check('nothing packed gives no sections', C.checklist({ name: 'T', bagIds: ['a'], packed: { a: {} }, cubes: {} }, listBags, listItems).sections, []);
+check('missing cubes are safe', C.checklist({ name: 'T', bagIds: ['a'], packed: { a: { shirt: 1 } } }, listBags, listItems).sections[0].lines, ['Shirt']);
+
 // Formatting
 check('format trims zeros', C.fmt(3.5), '3.5');
 check('format rounds to two decimals', C.fmt(1.2345), '1.23');
