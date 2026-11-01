@@ -172,23 +172,28 @@ check('density is kg per litre', C.density(1.6, 2), 0.8);
 check('no volume counts as medium', C.densityLabel(C.density(1, 0)), 'medium density');
 check('fleece reads light', C.densityLabel(C.density(0.5, 5)), 'light for its size');
 check('laptop reads dense', C.densityLabel(C.density(1.6, 1.5)), 'dense for its size');
-check('shade floor', C.densityShade(0.01), 0);
-check('shade ceiling', C.densityShade(5), 1);
-check('denser is darker', C.densityShade(1) > C.densityShade(0.2), true);
 
-check('MT100 jacket is the palest shade', C.densityShade(C.density(0.32, 4)), 0);
+// Box colour follows weight
+check('no weight is palest', C.weightShade(0, 10), 0);
+check('a fifth of the limit is deepest', C.weightShade(2, 10), 1);
+check('more than that stays deepest', C.weightShade(5, 10), 1);
+check('shade scales with weight', C.weightShade(1, 10), 0.5);
+check('no limit is safe', C.weightShade(1, 0), 0);
+check('same item is paler in a bag with a higher limit', C.weightShade(1.1, 23) < C.weightShade(1.1, 10), true);
+check('puffer outweighs power bank', C.weightShade(1.1, 10) > C.weightShade(0.2, 10), true);
+
 var lastLuminance = 2;
 var darkensSteadily = true;
 var readable = true;
 for (var step = 0; step <= 100; step++) {
-  var colors = C.densityColors(step / 100);
+  var colors = C.shadeColors(step / 100);
   if (colors.luminance >= lastLuminance) darkensSteadily = false;
   lastLuminance = colors.luminance;
   var textLuminance = colors.text === '#000' ? 0 : 1;
   var contrast = (Math.max(colors.luminance, textLuminance) + 0.05) / (Math.min(colors.luminance, textLuminance) + 0.05);
   if (contrast < 4.5) readable = false;
 }
-check('higher density is always darker', darkensSteadily, true);
+check('higher shade is always darker', darkensSteadily, true);
 check('text stays readable on every shade', readable, true);
 
 // Box sizes
@@ -217,6 +222,58 @@ check('no capacity is safe', tile(1, 'Item', 0).cols, 6);
 check('long names get taller boxes', tile(0.2, 'Columbia Silver Ridge Utility II shirt').rows > tile(0.2, 'Cap').rows, true);
 check('boxes never exceed the container width', tile(500).cols <= Math.floor((490 + 4) / 16), true);
 check('icon stays in range', tile(40).iconPx <= 56 && tile(0.1).iconPx >= 22, true);
+
+// Make room
+var roomItems = {
+  laptop: { id: 'laptop', name: 'Laptop', weightKg: 1.6, volumeL: 1.5 },
+  puffer: { id: 'puffer', name: 'Puffer', weightKg: 1.1, volumeL: 12 },
+  shirt: { id: 'shirt', name: 'Shirt', weightKg: 0.16, volumeL: 1 },
+  fleece: { id: 'fleece', name: 'Fleece', weightKg: 0.5, volumeL: 5 },
+  cube: { id: 'cube', name: 'Cube', cube: true, weightKg: 0.08, volumeL: 0.2, capacityL: 12 },
+  spare: { id: 'spare', name: 'Spare', cube: true, weightKg: 0.06, volumeL: 0.1, capacityL: 5 }
+};
+var roomBag = { emptyWeightKg: 2, capacityL: 30, weightLimitKg: 5, interiorCm: [52, 36, 21], isCarryOn: true };
+var fine = C.makeRoom(roomBag, { shirt: 1 }, roomItems);
+check('nothing shown when well under', [fine.weight, fine.volume], [null, null]);
+
+var room = C.makeRoom(roomBag, { laptop: 1, puffer: 1, shirt: 7 }, roomItems);
+check('over by weight', room.weight.overBy, 0.82);
+check('no volume section while volume is fine', room.volume, null);
+check('heaviest first', room.weight.rows.map(function (x) { return x.item.id; }), ['laptop', 'shirt', 'puffer']);
+check('row total covers quantity', room.weight.rows[1].total, 1.12);
+check('percent of limit', room.weight.rows[0].percent, 32);
+check('single item fixes it', room.weight.rows[0].fixCount, 1);
+check('several of a multiple fix it', room.weight.rows[1].fixCount, 6);
+check('single item also fixes', room.weight.rows[2].fixCount, 1);
+check('solution exists', room.weight.noSingleFix, false);
+
+var tooMany = C.makeRoom(roomBag, { shirt: 40 }, roomItems);
+check('count beyond what is packed is no fix', C.makeRoom(roomBag, { shirt: 2, laptop: 2, puffer: 1 }, roomItems).weight.rows.filter(function (x) { return x.item.id === 'shirt'; })[0].fixCount, null);
+check('multiple can fix when enough are packed', tooMany.weight.rows[0].fixCount, 22);
+var stuck = C.makeRoom(roomBag, { laptop: 3, puffer: 1 }, roomItems);
+check('two of one item can clear a big excess', [stuck.weight.overBy, stuck.weight.rows[0].fixCount, stuck.weight.noSingleFix], [2.9, 2, false]);
+var stuck2 = C.makeRoom({ emptyWeightKg: 2, capacityL: 90, weightLimitKg: 3, isCarryOn: true }, { fleece: 3, shirt: 2 }, roomItems);
+check('some of a multiple clears it', [stuck2.weight.overBy, stuck2.weight.noSingleFix], [0.82, false]);
+var stuck3 = C.makeRoom({ emptyWeightKg: 2, capacityL: 90, weightLimitKg: 3, isCarryOn: true }, { fleece: 1, shirt: 1, puffer: 1 }, roomItems);
+check('heaviest fixes alone', stuck3.weight.rows[0].fixCount, 1);
+var stuck4 = C.makeRoom({ emptyWeightKg: 2, capacityL: 90, weightLimitKg: 2.5, isCarryOn: true }, { fleece: 2, shirt: 2 }, roomItems);
+check('needs more than one kind', [stuck4.weight.overBy, stuck4.weight.rows[0].fixCount, stuck4.weight.rows[1].fixCount, stuck4.weight.noSingleFix], [0.82, 2, null, false]);
+var stuck5 = C.makeRoom({ emptyWeightKg: 2, capacityL: 90, weightLimitKg: 1.5, isCarryOn: true }, { fleece: 1, shirt: 2 }, roomItems);
+check('even all of one kind is not enough', [stuck5.weight.overBy, stuck5.weight.noSingleFix], [1.32, true]);
+
+var cubed = C.makeRoom(roomBag, { cube: 1, puffer: 2 }, roomItems, { cube: { fleece: 2, shirt: 1 } });
+check('cube contents ranked individually', cubed.volume.rows.map(function (x) { return [x.item.id, x.cubeId]; }), [['puffer', null], ['fleece', 'cube'], ['shirt', 'cube']]);
+check('cube shell not listed when it has contents', cubed.volume.rows.some(function (x) { return x.item.id === 'cube'; }), false);
+check('volume over counts cube once', cubed.volume.overBy, 5);
+check('item inside a cube can fix it', cubed.volume.rows[1].fixCount, 1);
+var withEmpty = C.makeRoom(roomBag, { spare: 1, puffer: 3 }, roomItems);
+check('empty cube can still be listed', withEmpty.volume.rows.some(function (x) { return x.item.id === 'spare'; }), true);
+
+var near = C.makeRoom(roomBag, { laptop: 1, puffer: 1 }, roomItems);
+check('near the limit gives a list with no fixes', [near.weight.level, near.weight.overBy, near.weight.left, near.weight.rows[0].fixCount], ['warn', 0, 0.3, null]);
+check('no weight limit means no weight section', C.makeRoom({ noun: 'cube', emptyWeightKg: 0.1, capacityL: 5, weightLimitKg: Infinity, isCarryOn: true }, { fleece: 2 }, roomItems).weight, null);
+check('open cube over volume gets a list', C.makeRoom({ noun: 'cube', emptyWeightKg: 0.1, capacityL: 5, weightLimitKg: Infinity, isCarryOn: true }, { fleece: 2 }, roomItems).volume.overBy, 5);
+check('bag over only from its own weight has no rows', C.makeRoom({ emptyWeightKg: 6, capacityL: 40, weightLimitKg: 5 }, {}, roomItems).weight.rows, []);
 
 // Formatting
 check('format trims zeros', C.fmt(3.5), '3.5');

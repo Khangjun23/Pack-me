@@ -283,8 +283,9 @@ var Store = (function () {
       commit();
       return true;
     },
-    unpack: function (itemId) {
-      var packed = packedInBag();
+    // With cubeId, takes one out of that cube rather than what is open.
+    unpack: function (itemId, cubeId) {
+      var packed = cubeId ? trip().cubes[cubeId] || {} : packedInBag();
       if (!packed[itemId]) return;
       packed[itemId] -= 1;
       if (packed[itemId] <= 0) delete packed[itemId];

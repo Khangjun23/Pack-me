@@ -197,6 +197,39 @@ input, select {
   background: linear-gradient(90deg, rgb(251, 243, 230), rgb(122, 38, 14));
 }
 
+/* Make room list */
+.room {
+  flex: none;
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+}
+.room summary { font-weight: 600; cursor: pointer; }
+#room-body { outline: none; }
+.room-section { margin-top: 8px; }
+.room-summary { font-size: 13px; font-weight: 600; }
+.room-section[data-level="over"] .room-summary { color: var(--over); }
+.room-section[data-level="warn"] .room-summary { color: var(--warn); }
+.room-note { margin-top: 3px; color: var(--muted); font-size: 12px; }
+.room-rows { margin: 4px 0 0; padding: 0; list-style: none; }
+.room-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto 3em auto;
+  align-items: center;
+  gap: 2px 8px;
+  padding: 4px 0;
+  border-top: 1px solid var(--line);
+  font-size: 13px;
+}
+.room-row:first-child { border-top: 0; }
+.room-name { overflow-wrap: anywhere; }
+.room-name small { display: block; color: var(--muted); font-size: 11.5px; }
+.room-value, .room-percent { font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; }
+.room-percent { color: var(--muted); }
+.room-remove { padding: 2px 8px; font-size: 12px; }
+.room-fix { grid-column: 1 / -1; color: var(--ok); font-size: 12px; font-weight: 600; }
+
 /* Suitcase */
 .suitcase {
   position: relative;

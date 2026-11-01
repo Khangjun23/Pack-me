@@ -97,6 +97,7 @@
       updateMeter($('meter-weight'), 0, 0, 'ok', '');
       updateMeter($('meter-volume'), 0, 0, 'ok', '');
       setHTML($('status'), '');
+      $('room').hidden = true;
       $('fill').style.height = '0';
       $('suitcase').dataset.level = 'ok';
       setHTML($('packed'), '<p class="empty-hint">This trip has no bags yet. Use “+ Add bag” to choose one.</p>');
@@ -128,10 +129,55 @@
     var fillPct = bag.capacityL > 0 ? Math.min(100, result.volumeL / bag.capacityL * 100) : 0;
     $('fill').style.height = 'calc((100% - 18px) * ' + fillPct / 100 + ')';
 
-    renderPacked(packed, items, result, bag.capacityL);
+    renderRoom(Calc.makeRoom(bag, packed, items, trip.cubes));
+
+    // An open cube has no limit of its own, so it borrows the limit of its bag.
+    var limitBagId = openCube ? Calc.cubeBagId(trip, openCube.id) || trip.activeBagId : null;
+    var weightLimit = openCube
+      ? (limitBagId ? Store.bagsById()[limitBagId].weightLimitKg : 10)
+      : bag.weightLimitKg;
+    renderPacked(packed, items, result, bag.capacityL, weightLimit);
   }
 
-  function renderPacked(packed, items, result, capacityL) {
+  var ROOM_ROWS_SHOWN = 6;
+
+  function roomSectionHTML(section, unit, label) {
+    var summary = section.overBy > 0
+      ? 'Over by ' + fmt(section.overBy) + ' ' + unit + '. Biggest ' + label + ':'
+      : 'Near the limit, ' + fmt(section.left) + ' ' + unit + ' left. Biggest ' + label + ':';
+    var cubeNames = Store.itemsById();
+    var rows = section.rows.slice(0, ROOM_ROWS_SHOWN).map(function (row) {
+      var where = row.cubeId ? '<small>in ' + esc(cubeNames[row.cubeId].name) + '</small>' : '';
+      var fix = '';
+      if (row.fixCount === 1) fix = row.qty > 1 ? 'Removing 1 fixes it' : 'Removing this fixes it';
+      else if (row.fixCount) fix = 'Removing ' + row.fixCount + ' fixes it';
+      var key = 'room-' + unit + '-' + row.item.id;
+      return '<li class="room-row">' +
+        '<span class="room-name">' + esc(row.item.name) + (row.qty > 1 ? ' x' + row.qty : '') + where + '</span>' +
+        '<span class="room-value">' + fmt(row.total) + ' ' + unit + '</span>' +
+        '<span class="room-percent">' + row.percent + '%</span>' +
+        '<button class="btn room-remove" data-action="room-remove" data-id="' + esc(row.item.id) + '" data-cube="' + esc(row.cubeId || '') + '" data-fk="' + esc(key) + '"' +
+        ' aria-label="Remove one ' + esc(row.item.name) + '">Remove</button>' +
+        (fix ? '<span class="room-fix">' + fix + '</span>' : '') +
+        '</li>';
+    }).join('');
+    var extra = section.noSingleFix ? '<p class="room-note">No one item clears this, so you need to remove several.</p>' : '';
+    var more = section.rows.length > ROOM_ROWS_SHOWN
+      ? '<p class="room-note">And ' + (section.rows.length - ROOM_ROWS_SHOWN) + ' smaller.</p>'
+      : '';
+    return '<div class="room-section" data-level="' + section.level + '" data-unit="' + unit + '">' +
+      '<p class="room-summary">' + summary + '</p>' + extra +
+      '<ol class="room-rows">' + rows + '</ol>' + more + '</div>';
+  }
+
+  function renderRoom(room) {
+    var weight = room.weight && room.weight.rows.length ? roomSectionHTML(room.weight, 'kg', 'weights') : '';
+    var volume = room.volume && room.volume.rows.length ? roomSectionHTML(room.volume, 'L', 'volumes') : '';
+    $('room').hidden = !weight && !volume;
+    setHTML($('room-body'), weight + volume);
+  }
+
+  function renderPacked(packed, items, result, capacityL, weightLimit) {
     var problems = {};
     result.oversized.forEach(function (o) { problems[o.item.id] = true; });
     result.misplaced.forEach(function (item) { problems[item.id] = true; });
@@ -159,7 +205,7 @@
     }).sort(function (a, b) { return b.volumeL - a.volumeL; });
 
     var html = tiles.map(function (tile) {
-      return tileHTML(tile, capacityL, box, problems);
+      return tileHTML(tile, capacityL, weightLimit, box, problems);
     }).join('') || '<p class="empty-hint">Drag items here to pack them</p>';
 
     setHTML(container, html);
@@ -171,8 +217,8 @@
     }
   }
 
-  // A box sized by volume and shaded by density.
-  function tileHTML(tile, capacityL, box, problems) {
+  // A box sized by volume and shaded by weight.
+  function tileHTML(tile, capacityL, weightLimit, box, problems) {
     var item = tile.item;
     var name = esc(item.name);
     var detail = fmt(tile.weightKg) + ' kg · ' + fmt(tile.volumeL) + ' L';
@@ -187,8 +233,8 @@
       extraPx: tile.cube ? 28 : 0
     });
     var density = Calc.density(tile.weightKg, tile.volumeL);
-    var shade = Calc.densityShade(density);
-    var colors = Calc.densityColors(shade);
+    var shade = Calc.weightShade(tile.weightKg, weightLimit);
+    var colors = Calc.shadeColors(shade);
     var removeLabel = tile.cube ? 'Take ' + name + ' out of the bag' : 'Remove one ' + name;
     var hint = tile.cube ? 'Drag out to take it out of the bag. What is inside stays in the cube.' : 'Drag out to remove.';
     return '<div class="chip" data-drag="packed" data-id="' + esc(item.id) + '" data-problem="' + (problems[item.id] === true) + '"' +
@@ -711,6 +757,7 @@
       });
     },
     'unpack': function (el) { Store.unpack(el.dataset.id); },
+    'room-remove': function (el) { Store.unpack(el.dataset.id, el.dataset.cube || null); },
     'filter': function (el) {
       ui.category = el.dataset.category;
       render();

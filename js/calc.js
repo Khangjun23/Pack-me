@@ -99,17 +99,16 @@ var Calc = (function () {
     return volumeL > 0 ? weightKg / volumeL : 0.4;
   }
 
-  // 0 to 1 on a log scale, so feather-light clothes and dense electronics both read clearly.
-  function densityShade(kgPerL) {
-    var low = 0.08;
-    var high = 1.5;
-    var shade = Math.log(Math.max(kgPerL, low) / low) / Math.log(high / low);
+  // 0 to 1 by share of the weight limit, reaching full depth at a fifth of the limit.
+  function weightShade(weightKg, limitKg) {
+    if (!(limitKg > 0)) return 0;
+    var shade = (weightKg / limitKg) / 0.2;
     return Math.round(Math.min(1, shade) * 100) / 100;
   }
 
-  // The same scale in light and dark themes, so darker always means denser.
+  // The same scale in light and dark themes, so darker always means heavier.
   // Text is black or white, whichever stays readable on that shade.
-  function densityColors(shade) {
+  function shadeColors(shade) {
     var pale = [251, 243, 230];
     var deep = [122, 38, 14];
     var rgb = pale.map(function (channel, i) {
@@ -252,6 +251,67 @@ var Calc = (function () {
     };
   }
 
+  // What is packed, one row per item, with cube contents listed individually.
+  function packedRows(packed, itemsById, cubes) {
+    var rows = [];
+    function add(item, qty, cubeId) {
+      rows.push({ item: item, qty: qty, cubeId: cubeId });
+    }
+    Object.keys(packed || {}).forEach(function (id) {
+      var item = itemsById[id];
+      if (!item || !(packed[id] > 0)) return;
+      if (item.cube !== true) {
+        add(item, packed[id], null);
+        return;
+      }
+      var contents = (cubes && cubes[id]) || {};
+      var before = rows.length;
+      Object.keys(contents).forEach(function (innerId) {
+        if (itemsById[innerId] && contents[innerId] > 0) add(itemsById[innerId], contents[innerId], id);
+      });
+      if (rows.length === before) add(item, packed[id], null); // An empty cube can still come out.
+    });
+    return rows;
+  }
+
+  function roomSection(rows, measure, total, limit, level) {
+    if (level === 'ok') return null;
+    var overBy = level === 'over' ? round(total - limit) : 0;
+    var ranked = rows.map(function (row) {
+      var unit = row.item[measure];
+      var fixCount = overBy > 0 && unit > 0 ? Math.ceil(round(overBy / unit)) : null;
+      return {
+        item: row.item,
+        qty: row.qty,
+        cubeId: row.cubeId,
+        total: round(unit * row.qty),
+        percent: limit > 0 ? Math.round(unit * row.qty / limit * 100) : 0,
+        fixCount: fixCount !== null && fixCount <= row.qty ? fixCount : null
+      };
+    }).filter(function (row) {
+      return row.total > 0;
+    }).sort(function (a, b) {
+      return b.total - a.total;
+    });
+    return {
+      level: level,
+      overBy: overBy,
+      left: round(limit - total),
+      rows: ranked,
+      noSingleFix: overBy > 0 && !ranked.some(function (row) { return row.fixCount !== null; })
+    };
+  }
+
+  // For a bag near or over a limit: what uses the most, and what removing it would achieve.
+  function makeRoom(bag, packed, itemsById, cubes) {
+    var totals = evaluate(bag, packed, itemsById, cubes);
+    var rows = packedRows(packed, itemsById, cubes);
+    return {
+      weight: roomSection(rows, 'weightKg', totals.weightKg, bag.weightLimitKg, totals.weightLevel),
+      volume: roomSection(rows, 'volumeL', totals.volumeL, bag.capacityL, totals.volumeLevel)
+    };
+  }
+
   // Every bag on the trip, including the weight of the bags themselves, plus
   // filled cubes that have not been put in a bag yet.
   function tripWeightKg(trip, bagsById, itemsById) {
@@ -283,9 +343,10 @@ var Calc = (function () {
     packedInTrip: packedInTrip,
     remaining: remaining,
     density: density,
-    densityShade: densityShade,
-    densityColors: densityColors,
+    weightShade: weightShade,
+    shadeColors: shadeColors,
     densityLabel: densityLabel,
+    makeRoom: makeRoom,
     tileSize: tileSize,
     cubeTotals: cubeTotals,
     cubeBagId: cubeBagId,
