@@ -8,15 +8,17 @@ var Seed = (function () {
 
   // Bump DATA_VERSION when starter records change. Saved data below a version
   // gets that version's records once, on load (see Store.normalize).
-  var DATA_VERSION = 6;
-  var OWNED = { usbc: 3, socks: 2, pole: 2 };
+  var DATA_VERSION = 7;
+  var OWNED = { usbc: 3, socks: 2, pole: 2, tshirt: 7, drifit: 7, workoutshorts: 5, underwear: 10 };
   var ITEM_UPDATES = [
     { version: 2, keys: ['camera', 'lens', 'charger', 'usbc', 'tripod', 'djinano', 'mt66', 'headphones', 'bottle',
       'powerbank', 'jacket', 'socks', 'mt900', 'pole', 'gloves', 'zipoff'] },
     { version: 4, keys: ['fasttrek', 'glacier', 'energytech'] },
     { version: 5, keys: ['uniqlocargo', 'silverridge', 'heattechtop', 'heattechbottom', 'extrawarmtop',
       'extrawarmbottom', 'ultrawarmtop', 'ultrawarmbottom'] },
-    { version: 6, keys: ['halfmoon1', 'halfmoon2', 'cubel1', 'cubel2', 'cubes1', 'cubes2', 'cubes3', 'cubes4'] }
+    { version: 6, keys: ['halfmoon1', 'halfmoon2', 'cubel1', 'cubel2', 'cubes1', 'cubes2', 'cubes3', 'cubes4'] },
+    { version: 7, keys: ['tshirt', 'drifit', 'silverridgeshirt', 'workoutshorts', 'underwear', 'puffer', 'thpuffer',
+      'sneakers', 'techamphibian'] }
   ];
   // The bag packs these replaced by individual cubes in version 6.
   var REMOVED_IN_V6 = ['item-halfmoon', 'item-travelbags'];
@@ -46,7 +48,9 @@ var Seed = (function () {
   }
 
   var ITEMS = [
-    item('tshirt', 'T-shirt', 'Everyday cotton tee', 'Clothes', 0.18, 1, '👕'),
+    item('tshirt', 'Cotton T-shirt', 'Everyday cotton tee, typical weight', 'Clothes', 0.16, 1, '👕'),
+    item('drifit', 'Dri-FIT T-shirt', 'Training tee, typical weight', 'Clothes', 0.145, 0.8, '👕'),
+    item('silverridgeshirt', 'Columbia Silver Ridge Utility II shirt', 'Short-sleeve hiking shirt', 'Clothes', 0.246, 1.5, '👕'),
     item('shirt', 'Button shirt', 'Smart shirt for dinners out', 'Clothes', 0.25, 1.5, '👕'),
     item('jeans', 'Jeans', 'Classic denim, rolled', 'Clothes', 0.7, 3, '👖'),
     item('trousers', 'Light trousers', 'Quick-dry travel pair', 'Clothes', 0.35, 2, '👖'),
@@ -61,18 +65,21 @@ var Seed = (function () {
     item('ultrawarmtop', 'Uniqlo HEATTECH Ultra Warm top', 'About 2.25x warmer than normal', 'Clothes', 0.25, 1.2, '👕'),
     item('ultrawarmbottom', 'Uniqlo HEATTECH Ultra Warm bottom', 'About 2.25x warmer than normal', 'Clothes', 0.23, 1, '👖'),
     item('shorts', 'Shorts', 'Casual warm-weather pair', 'Clothes', 0.25, 1, '🩳'),
+    item('workoutshorts', 'Workout shorts', 'Gym pair, typical weight', 'Clothes', 0.15, 0.8, '🩳'),
     item('dress', 'Dress', 'Packs small, dresses up', 'Clothes', 0.3, 1.5, '👗'),
     item('sweater', 'Sweater', 'Warm knit layer', 'Clothes', 0.5, 4, '🧥'),
     item('jacket', 'Kathmandu Trailhead jacket', 'Stretch 2.5-layer rain jacket', 'Clothes', 0.3, 2, '🧥'),
-    item('puffer', 'Down jacket', 'Warm, compresses well', 'Clothes', 0.45, 5, '🧥'),
+    item('puffer', 'Forclaz MT100 down jacket', 'Water-repellent, hooded, to -5°C', 'Clothes', 0.32, 4, '🧥'),
+    item('thpuffer', 'Tommy Hilfiger puffer', 'Larger hooded puffer', 'Clothes', 1.1, 12, '🧥'),
     item('fasttrek', 'Columbia Fast Trek II fleece', 'Full-zip microfleece, size L', 'Clothes', 0.545, 5, '🧥'),
     item('glacier', 'North Face TKA Glacier fleece', '100-weight 1/4-zip fleece', 'Clothes', 0.215, 2.5, '🧥'),
     item('socks', 'Kathmandu NuYarn socks', 'Ergonomic hike socks, per pair', 'Clothes', 0.088, 0.4, '🧦'),
     item('gloves', 'Forclaz MT500 gloves', 'Tactile stretch trekking gloves', 'Clothes', 0.06, 0.3, '🧤'),
-    item('underwear', 'Underwear', 'One pair', 'Clothes', 0.05, 0.15, '🩲'),
+    item('underwear', 'Underwear', 'One pair, typical weight', 'Clothes', 0.075, 0.2, '🩲'),
     item('swimwear', 'Swimwear', 'For the beach or pool', 'Clothes', 0.15, 0.5, '🩱'),
     item('hat', 'Cap', 'Sun protection', 'Clothes', 0.1, 1, '🧢'),
-    item('sneakers', 'Sneakers', 'Comfortable walking pair', 'Shoes', 0.8, 7, '👟', [31, 21, 12]),
+    item('sneakers', 'Nike Vomero 18 GTX', 'Black, US 9.5, pair', 'Shoes', 0.64, 9.15, '👟', [32, 22, 13]),
+    item('techamphibian', 'Salomon Techamphibian', 'Black, US 9.5, pair', 'Shoes', 0.62, 5.58, '👟', [31, 20, 9]),
     item('boots', 'Hiking boots', 'Sturdy pair for trails', 'Shoes', 1.2, 10, '🥾', [33, 24, 16]),
     item('energytech', 'North Face Energy Tech II boots', 'Mid GTX hiking and trekking pair', 'Shoes', 1.05, 10.56, '🥾', [32, 22, 15]),
     item('sandals', 'Sandals', 'Light summer pair', 'Shoes', 0.4, 2, '🩴', [29, 20, 6]),
