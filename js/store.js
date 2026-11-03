@@ -212,7 +212,12 @@ var Store = (function () {
         return { itemId: entry.itemId, rewear: entry.rewear === true };
       });
       var place = shortText(source.place, 80);
-      if (place || outfit.length) days[date] = { place: place, outfit: outfit };
+      var laundry = source.laundry ? {
+        except: (Array.isArray(source.laundry.except) ? source.laundry.except : []).filter(function (id, i, all) {
+          return itemIds[id] === true && all.indexOf(id) === i;
+        })
+      } : null;
+      if (place || outfit.length || laundry) days[date] = { place: place, outfit: outfit, laundry: laundry };
     });
     return {
       departDate: matching(it.departDate, DATE),
@@ -390,6 +395,7 @@ var Store = (function () {
         Object.keys(t.itinerary.days).forEach(function (date) {
           var day = t.itinerary.days[date];
           day.outfit = day.outfit.filter(function (entry) { return entry.itemId !== itemId; });
+          if (day.laundry) day.laundry.except = day.laundry.except.filter(function (id) { return id !== itemId; });
         });
       });
       commit();
@@ -512,6 +518,21 @@ var Store = (function () {
       day.outfit = day.outfit.filter(function (entry) { return entry.itemId !== itemId; });
       commit();
     },
+    toggleLaundry: function (date) {
+      var day = planDay(date);
+      day.laundry = day.laundry ? null : { except: [] };
+      commit();
+    },
+    // Whether an item goes in that day's wash. Everything dirty is washed unless left out.
+    toggleWashItem: function (date, itemId) {
+      var day = planDay(date);
+      if (!day.laundry) return;
+      var except = day.laundry.except;
+      var at = except.indexOf(itemId);
+      if (at === -1) except.push(itemId);
+      else except.splice(at, 1);
+      commit();
+    },
     toggleRewear: function (date, itemId) {
       planDay(date).outfit.forEach(function (entry) {
         if (entry.itemId === itemId) entry.rewear = !entry.rewear;
@@ -531,7 +552,7 @@ var Store = (function () {
 
   function planDay(date) {
     var days = trip().itinerary.days;
-    return days[date] || (days[date] = { place: '', outfit: [] });
+    return days[date] || (days[date] = { place: '', outfit: [], laundry: null });
   }
 
   function removeFromTrip(t, bagId) {

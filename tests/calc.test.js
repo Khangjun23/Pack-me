@@ -353,6 +353,45 @@ var shortTrip = { bagIds: ['a'], packed: { a: { jeans: 1 } }, cubes: {} };
 check('needs more packing', C.outfitCheck(shortTrip, wear, needs).rows.filter(function (r) { return r.item.id === 'tee'; })[0].status, 'short');
 check('empty plans give an empty check', C.outfitCheck(shortTrip, wear, {}).rows, []);
 
+// Laundry
+var wash = {
+  tee: { id: 'tee', name: 'Tee', category: 'Clothes', ownedQty: 7 },
+  jeans: { id: 'jeans', name: 'Jeans', category: 'Clothes', ownedQty: 1 },
+  socks: { id: 'socks', name: 'Socks', category: 'Clothes', ownedQty: 3 }
+};
+var washDays = ['d1', 'd2', 'd3', 'd4', 'd5', 'd6'];
+function teeDays(extra) {
+  var p = {};
+  washDays.forEach(function (d) { p[d] = { outfit: [{ itemId: 'tee' }, { itemId: 'jeans' }] }; });
+  Object.keys(extra || {}).forEach(function (d) { p[d].laundry = extra[d]; });
+  return p;
+}
+function kindsOf(plan, id) {
+  return washDays.map(function (d) {
+    return plan.entries[d].filter(function (e) { return e.item.id === id; })[0].kind;
+  });
+}
+var noWash = C.outfitPlan(washDays, teeDays(), wash);
+check('six days without laundry need six tees', C.outfitNeeds(noWash.entries).tee.needed, 6);
+var midWash = C.outfitPlan(washDays, teeDays({ d3: { except: [] } }), wash);
+check('washing on day 3 reuses those tees', kindsOf(midWash, 'tee'), ['first', 'new', 'new', 'washed', 'washed', 'washed']);
+check('so only three tees are needed', C.outfitNeeds(midWash.entries).tee.needed, 3);
+check('laundry list shows what was dirty', midWash.laundry.d3.map(function (x) { return [x.item.id, x.count, x.washed]; }), [['tee', 3, true], ['jeans', 1, true]]);
+check('single jeans come back washed', kindsOf(midWash, 'jeans'), ['first', 'same', 'same', 'washed', 'same', 'same']);
+check('jeans still need one', C.outfitNeeds(midWash.entries).jeans.needed, 1);
+var twoWashes = C.outfitPlan(washDays, teeDays({ d2: { except: [] }, d4: { except: [] } }), wash);
+check('washing every second day needs two tees', C.outfitNeeds(twoWashes.entries).tee.needed, 2);
+var kept = C.outfitPlan(washDays, teeDays({ d3: { except: ['tee'] } }), wash);
+check('an item left out of the wash stays dirty', C.outfitNeeds(kept.entries).tee.needed, 6);
+check('and is listed as not washed', kept.laundry.d3.filter(function (x) { return x.item.id === 'tee'; })[0].washed, false);
+check('ignoring laundry shows the saving', C.outfitNeeds(C.outfitPlan(washDays, teeDays({ d3: { except: [] } }), wash, true).entries).tee.needed, 6);
+var early = C.outfitPlan(['d1', 'd2'], { d1: { outfit: [], laundry: { except: [] } }, d2: { outfit: [{ itemId: 'tee' }] } }, wash);
+check('laundry before anything is worn washes nothing', [early.laundry.d1, C.outfitNeeds(early.entries).tee.needed], [[], 1]);
+var rewearClean = C.outfitPlan(['d1', 'd2', 'd3'], { d1: { outfit: [{ itemId: 'socks' }], laundry: { except: [] } }, d2: { outfit: [{ itemId: 'socks', rewear: true }] }, d3: { outfit: [{ itemId: 'socks' }] } }, wash);
+check('re-wear after a full wash uses the clean piece', rewearClean.entries.d2[0].kind, 'washed');
+check('then a fresh one is needed', [rewearClean.entries.d3[0].kind, C.outfitNeeds(rewearClean.entries).socks.needed], ['new', 2]);
+check('older callers still get entries', C.outfitEntries(washDays, teeDays({ d3: { except: [] } }), wash).d4[0].kind, 'washed');
+
 // Formatting
 check('format trims zeros', C.fmt(3.5), '3.5');
 check('format rounds to two decimals', C.fmt(1.2345), '1.23');

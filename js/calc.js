@@ -348,27 +348,64 @@ var Calc = (function () {
     return names[date.getUTCDay()] + ' ' + date.getUTCDate() + ' ' + months[date.getUTCMonth()];
   }
 
-  // Each outfit entry, in date order, marked as one of:
+  // Walks the trip day by day, tracking clean and dirty pieces of each item.
+  // Each outfit entry is marked as one of:
   //   first   the first time the item is worn on the trip
-  //   new     another one of an item you own several of
-  //   rewear  wearing an earlier one again, by choice
-  //   same    the only one you own, so it can only be worn again
-  function outfitEntries(days, dayPlans, itemsById) {
-    var worn = {};
-    var result = {};
+  //   new     another one of an item you own several of, so one more to pack
+  //   washed  a piece that came back clean from laundry, so nothing more to pack
+  //   rewear  wearing a dirty piece again, by choice
+  //   same    the only one you own, worn again without washing
+  // On a laundry day, everything dirty by the end of that day is washed, except
+  // the items listed in laundry.except. With ignoreLaundry, laundry days are skipped,
+  // which shows what laundry saves.
+  function outfitPlan(days, dayPlans, itemsById, ignoreLaundry) {
+    var state = {};
+    var entries = {};
+    var laundry = {};
     days.forEach(function (date) {
-      var outfit = (dayPlans[date] && dayPlans[date].outfit) || [];
-      result[date] = outfit.filter(function (entry) { return itemsById[entry.itemId]; }).map(function (entry) {
+      var plan = dayPlans[date] || {};
+      entries[date] = (plan.outfit || []).filter(function (entry) { return itemsById[entry.itemId]; }).map(function (entry) {
         var item = itemsById[entry.itemId];
+        var s = state[item.id] || (state[item.id] = { worn: false, dirty: 0, clean: 0 });
         var kind;
-        if (!worn[entry.itemId]) kind = 'first';
-        else if (!(item.ownedQty > 1)) kind = 'same';
-        else kind = entry.rewear ? 'rewear' : 'new';
-        worn[entry.itemId] = true;
+        if (!s.worn) {
+          kind = 'first';
+          s.dirty += 1;
+        } else if (entry.rewear && item.ownedQty > 1 && s.dirty > 0) {
+          kind = 'rewear';
+        } else if (s.clean > 0) {
+          kind = 'washed';
+          s.clean -= 1;
+          s.dirty += 1;
+        } else if (item.ownedQty > 1) {
+          kind = 'new';
+          s.dirty += 1;
+        } else {
+          kind = 'same';
+        }
+        s.worn = true;
         return { item: item, kind: kind };
       });
+      if (plan.laundry && !ignoreLaundry) {
+        var except = plan.laundry.except || [];
+        laundry[date] = Object.keys(state).filter(function (id) {
+          return state[id].dirty > 0;
+        }).map(function (id) {
+          var washed = except.indexOf(id) === -1;
+          var count = state[id].dirty;
+          if (washed) {
+            state[id].clean += count;
+            state[id].dirty = 0;
+          }
+          return { item: itemsById[id], count: count, washed: washed };
+        });
+      }
     });
-    return result;
+    return { entries: entries, laundry: laundry };
+  }
+
+  function outfitEntries(days, dayPlans, itemsById) {
+    return outfitPlan(days, dayPlans, itemsById).entries;
   }
 
   // How many of each item the outfits need: one for the first wear, plus one per fresh one after.
@@ -522,6 +559,7 @@ var Calc = (function () {
     tripLength: tripLength,
     tripDays: tripDays,
     formatDay: formatDay,
+    outfitPlan: outfitPlan,
     outfitEntries: outfitEntries,
     outfitNeeds: outfitNeeds,
     outfitCheck: outfitCheck,

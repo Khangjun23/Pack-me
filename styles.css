@@ -377,6 +377,42 @@ details.plan-block[open] > summary { margin-bottom: 8px; }
 }
 .outfit-remove:hover { background: var(--surface-2); color: var(--over); }
 
+.laundry-toggle {
+  margin-left: auto;
+  padding: 2px 10px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 12px;
+  cursor: pointer;
+}
+.laundry-toggle::before { content: "\25CB  "; }
+.laundry-toggle[aria-pressed="true"] { border-color: var(--shell); background: var(--shell); color: var(--shell-ink); font-weight: 600; }
+.laundry-toggle[aria-pressed="true"]::before { content: "\2713  "; }
+.laundry {
+  margin-top: 8px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: var(--surface-2);
+}
+.laundry-note { color: var(--muted); font-size: 12.5px; }
+.wash-items { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.wash-item {
+  padding: 2px 10px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--muted);
+  font-size: 12.5px;
+  text-decoration: line-through;
+  cursor: pointer;
+}
+.wash-item::before { content: "\25A1  "; }
+.wash-item[aria-pressed="true"] { border-color: var(--shell); color: var(--ink); text-decoration: none; }
+.wash-item[aria-pressed="true"]::before { content: "\2611  "; }
+.outfit-washed { border-color: var(--ok); color: var(--ok); }
+.check-laundry { margin-top: 2px; color: var(--ok); font-size: 13px; font-weight: 600; }
 .check-summary { font-weight: 600; }
 .check-empty { color: var(--muted); font-size: 13px; }
 .check-rows { margin: 6px 0 0; padding: 0; list-style: none; }

@@ -404,9 +404,15 @@
 
   function planState() {
     var it = Store.trip().itinerary;
+    var items = Store.itemsById();
     var days = Calc.tripDays(it.departDate, it.returnDate);
-    var entries = Calc.outfitEntries(days, it.days, Store.itemsById());
-    return { it: it, days: days, entries: entries, needs: Calc.outfitNeeds(entries) };
+    var plan = Calc.outfitPlan(days, it.days, items);
+    var needs = Calc.outfitNeeds(plan.entries);
+    var unwashed = Calc.outfitNeeds(Calc.outfitPlan(days, it.days, items, true).entries);
+    var saved = Object.keys(unwashed).reduce(function (sum, id) {
+      return sum + unwashed[id].needed - (needs[id] ? needs[id].needed : 0);
+    }, 0);
+    return { it: it, days: days, entries: plan.entries, laundry: plan.laundry, needs: needs, laundrySaves: saved };
   }
 
   // Leaves a field alone while it is being typed in.
@@ -463,6 +469,8 @@
     var tag = '';
     if (entry.kind === 'same') {
       tag = '<span class="outfit-tag" title="You own one, so this is the same one again">Re-worn</span>';
+    } else if (entry.kind === 'washed') {
+      tag = '<span class="outfit-tag outfit-washed" title="Clean again after laundry, so nothing more to pack">Washed</span>';
     } else if (entry.kind === 'new' || entry.kind === 'rewear') {
       tag = '<button class="outfit-toggle" data-action="outfit-rewear" data-day="' + date + '" data-id="' + id + '"' +
         ' data-fk="rewear-' + date + '-' + id + '" aria-pressed="' + (entry.kind === 'rewear') + '"' +
@@ -475,21 +483,40 @@
       '</span>';
   }
 
-  function dayHTML(date, index, it, entries) {
+  function laundryHTML(date, list) {
+    var items = list.map(function (entry) {
+      var id = esc(entry.item.id);
+      return '<button class="wash-item" data-action="wash-toggle" data-day="' + date + '" data-id="' + id + '"' +
+        ' data-fk="wash-' + date + '-' + id + '" aria-pressed="' + entry.washed + '">' +
+        esc(entry.item.name) + (entry.count > 1 ? ' x' + entry.count : '') + '</button>';
+    }).join('');
+    return '<div class="laundry">' +
+      '<p class="laundry-note">Washed at the end of the day, so they can be worn again as fresh pieces. Untick anything you won’t wash.</p>' +
+      (items ? '<div class="wash-items">' + items + '</div>' : '<p class="laundry-note">Nothing has been worn yet to wash.</p>') +
+      '</div>';
+  }
+
+  function dayHTML(date, index, it, entries, laundryList) {
     var plan = it.days[date] || { place: '' };
     var chips = entries.map(function (entry) { return outfitChip(date, index + 1, entry); }).join('');
+    var laundryOn = !!plan.laundry;
     return '<article class="day" data-day="' + date + '" data-selected="' + (date === ui.selectedDay) + '" data-action="day-select">' +
-      '<div class="day-head"><h3>Day ' + (index + 1) + '</h3><span class="day-date">' + Calc.formatDay(date) + '</span></div>' +
+      '<div class="day-head"><h3>Day ' + (index + 1) + '</h3><span class="day-date">' + Calc.formatDay(date) + '</span>' +
+      '<button class="laundry-toggle" data-action="laundry-toggle" data-day="' + date + '" data-fk="laundry-' + date + '" aria-pressed="' + laundryOn + '">Laundry</button></div>' +
       flightLines(date, it).map(function (line) { return '<p class="day-flight">' + esc(line) + '</p>'; }).join('') +
       '<label class="day-place">Where <input data-day-place="' + date + '" data-fk="place-' + date + '" maxlength="80" placeholder="e.g. Kyoto" value="' + esc(plan.place) + '"></label>' +
       '<div class="outfit">' + (chips || '<span class="outfit-empty">No outfit yet</span>') + '</div>' +
+      (laundryOn ? laundryHTML(date, laundryList || []) : '') +
       '</article>';
   }
 
-  function checkHTML(report) {
+  function checkHTML(report, laundrySaves) {
     if (!report.rows.length && !report.unplanned.length) {
       return '<p class="check-empty">Add outfits to your days to compare them with what you have packed.</p>';
     }
+    var savings = laundrySaves > 0
+      ? '<p class="check-laundry">Laundry saves packing ' + laundrySaves + (laundrySaves === 1 ? ' item.' : ' items.') + '</p>'
+      : '';
     var toPack = report.rows.filter(function (r) { return r.status === 'short' || r.status === 'owned'; }).length;
     var extra = report.rows.filter(function (r) { return r.status === 'extra'; }).length;
     var parts = [];
@@ -515,7 +542,7 @@
         return esc(u.item.name) + (u.packed > 1 ? ' x' + u.packed : '');
       }).join(', ') + '. Leave these out if you won’t wear them.</p>'
       : '';
-    return '<p class="check-summary">' + summary + '</p>' + (rows ? '<ul class="check-rows">' + rows + '</ul>' : '') + unplanned;
+    return '<p class="check-summary">' + summary + '</p>' + savings + (rows ? '<ul class="check-rows">' + rows + '</ul>' : '') + unplanned;
   }
 
   function renderPlan() {
@@ -547,14 +574,14 @@
 
     if (state.days.indexOf(ui.selectedDay) === -1) ui.selectedDay = state.days[0] || null;
     setHTML($('days'), state.days.length
-      ? state.days.map(function (date, i) { return dayHTML(date, i, it, state.entries[date]); }).join('')
+      ? state.days.map(function (date, i) { return dayHTML(date, i, it, state.entries[date], state.laundry[date]); }).join('')
       : '<p class="outfit-empty">Your days will appear here once both dates are set.</p>');
     if (ui.justPlanned) {
       var chip = document.querySelector('#days .day[data-day="' + ui.justPlanned.date + '"] .outfit-item[data-id="' + ui.justPlanned.id + '"]');
       if (chip) chip.classList.add('pop');
       ui.justPlanned = null;
     }
-    setHTML($('outfit-check'), checkHTML(Calc.outfitCheck(trip, Store.itemsById(), state.needs)));
+    setHTML($('outfit-check'), checkHTML(Calc.outfitCheck(trip, Store.itemsById(), state.needs), state.laundrySaves));
   }
 
   // ----- Packing -----
@@ -1046,6 +1073,11 @@
     },
     'outfit-remove': function (el) { Store.removeFromOutfit(el.dataset.day, el.dataset.id); },
     'outfit-rewear': function (el) { Store.toggleRewear(el.dataset.day, el.dataset.id); },
+    'laundry-toggle': function (el) {
+      ui.selectedDay = el.dataset.day;
+      Store.toggleLaundry(el.dataset.day);
+    },
+    'wash-toggle': function (el) { Store.toggleWashItem(el.dataset.day, el.dataset.id); },
     'room-remove': function (el) { Store.unpack(el.dataset.id, el.dataset.cube || null); },
     'filter': function (el) {
       ui.category = el.dataset.category;
