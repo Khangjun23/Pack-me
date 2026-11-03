@@ -53,7 +53,8 @@ var Store = (function () {
         category: text(i.category, 'Other'),
         weightKg: num(i.weightKg),
         volumeL: num(i.volumeL),
-        icon: text(i.icon, '📦')
+        // Joined emoji can be several characters long, but anything longer is not one icon.
+        icon: text(i.icon, '📦').length <= 16 ? text(i.icon, '📦').trim() || '📦' : '📦'
       };
       var d = dims(i.dimsCm);
       if (d) item.dimsCm = d;

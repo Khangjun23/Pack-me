@@ -734,6 +734,7 @@
     form.elements.isCube.disabled = !!item && !isCopy;
     form.elements.capacityL.value = itemDraft.cube === true ? itemDraft.capacityL : '';
     syncCubeFields();
+    $('emoji-input').value = '';
     $('photo-input').value = '';
     $('item-error').textContent = '';
     $('item-delete').hidden = !item || !!isCopy;
@@ -746,8 +747,45 @@
     if (isCopy) form.elements.name.select();
   }
 
+  // The first character a person would see, keeping flags, skin tones and joined emoji whole.
+  function firstGrapheme(text) {
+    if (window.Intl && Intl.Segmenter) {
+      var first = new Intl.Segmenter(undefined, { granularity: 'grapheme' }).segment(text)[Symbol.iterator]().next();
+      return first.done ? '' : first.value.segment;
+    }
+    return Array.from(text)[0] || '';
+  }
+
+  function isEmoji(text) {
+    return /\p{Extended_Pictographic}|\p{Regional_Indicator}|⃣/u.test(text);
+  }
+
+  function chooseTypedEmoji() {
+    var input = $('emoji-input');
+    var typed = input.value.trim();
+    if (!typed) {
+      $('item-error').textContent = '';
+      return;
+    }
+    var emoji = firstGrapheme(typed);
+    if (!isEmoji(emoji)) {
+      $('item-error').textContent = 'Type or paste a single emoji for the icon.';
+      return;
+    }
+    $('item-error').textContent = '';
+    input.value = emoji;
+    itemDraft.icon = emoji;
+    renderIconPicker();
+    renderPhotoPreview();
+  }
+
   function renderIconPicker() {
-    var icons = Seed.ICONS.indexOf(itemDraft.icon) === -1 ? [itemDraft.icon].concat(Seed.ICONS) : Seed.ICONS;
+    // Starter icons, then any other emoji already used in your inventory, so they are easy to reuse.
+    var icons = Seed.ICONS.slice();
+    Store.state.items.forEach(function (item) {
+      if (icons.indexOf(item.icon) === -1) icons.push(item.icon);
+    });
+    if (icons.indexOf(itemDraft.icon) === -1) icons.unshift(itemDraft.icon);
     $('icon-picker').innerHTML = icons.map(function (icon) {
       return '<button type="button" class="icon-choice" role="radio" data-action="icon-choose" data-icon="' + esc(icon) + '" aria-checked="' + (icon === itemDraft.icon) + '">' + esc(icon) + '</button>';
     }).join('');
@@ -1161,6 +1199,7 @@
   });
   autoVolume($('bag-form'), function () { return 'capacityL'; });
   $('item-form').elements.isCube.addEventListener('change', syncCubeFields);
+  $('emoji-input').addEventListener('input', chooseTypedEmoji);
   $('name-form').addEventListener('submit', function (e) {
     e.preventDefault();
     var name = e.target.elements.name.value.trim();
