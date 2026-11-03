@@ -390,6 +390,20 @@ check('laundry before anything is worn washes nothing', [early.laundry.d1, C.out
 var rewearClean = C.outfitPlan(['d1', 'd2', 'd3'], { d1: { outfit: [{ itemId: 'socks' }], laundry: { except: [] } }, d2: { outfit: [{ itemId: 'socks', rewear: true }] }, d3: { outfit: [{ itemId: 'socks' }] } }, wash);
 check('re-wear after a full wash uses the clean piece', rewearClean.entries.d2[0].kind, 'washed');
 check('then a fresh one is needed', [rewearClean.entries.d3[0].kind, C.outfitNeeds(rewearClean.entries).socks.needed], ['new', 2]);
+function rewearDays(days) {
+  var p = {};
+  washDays.forEach(function (d) { p[d] = { outfit: [{ itemId: 'tee', rewear: days.indexOf(d) !== -1 }] }; });
+  p.d2.laundry = { except: [] };
+  return p;
+}
+var washThenRewear = C.outfitPlan(washDays, rewearDays(['d4', 'd5']), wash);
+check('wear a washed tee, then re-wear it for two days', kindsOf(washThenRewear, 'tee'), ['first', 'new', 'washed', 'rewear', 'rewear', 'washed']);
+check('re-wear is offered on a washed day', [washThenRewear.entries.d6[0].kind, washThenRewear.entries.d6[0].canRewear], ['washed', true]);
+check('wear count per piece', washDays.map(function (d) { return washThenRewear.entries[d][0].wear; }), [1, 1, 1, 2, 3, 1]);
+check('re-wears are counted', C.outfitNeeds(washThenRewear.entries).tee.rewears, 2);
+check('re-wear not offered before anything is dirty', [washThenRewear.entries.d1[0].canRewear, rewearClean.entries.d2[0].canRewear], [false, false]);
+check('single jeans count each re-wear', [midWash.entries.d3.filter(function (e) { return e.item.id === 'jeans'; })[0].wear, C.outfitNeeds(midWash.entries).jeans.rewears], [3, 4]);
+check('check rows carry the re-wear count', C.outfitCheck(planTrip, wear, needs).rows.map(function (r) { return r.item.id + ':' + r.rewears; }), ['socks:0', 'tee:1', 'jeans:2']);
 check('older callers still get entries', C.outfitEntries(washDays, teeDays({ d3: { except: [] } }), wash).d4[0].kind, 'washed');
 
 // Formatting

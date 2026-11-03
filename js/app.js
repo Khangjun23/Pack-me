@@ -464,17 +464,28 @@
     return lines;
   }
 
+  function ordinal(n) {
+    var tens = n % 100;
+    var suffix = tens > 10 && tens < 14 ? 'th' : ({ 1: 'st', 2: 'nd', 3: 'rd' }[n % 10] || 'th');
+    return n + suffix;
+  }
+
   function outfitChip(date, dayNumber, entry) {
     var id = esc(entry.item.id);
+    var times = entry.wear - 1;
+    var count = times > 0 ? ' <span class="rewear-count">' + times + '×</span>' : '';
+    var wearNote = times > 0 ? ' This piece’s ' + ordinal(entry.wear) + ' wear since it was fresh or washed.' : '';
     var tag = '';
     if (entry.kind === 'same') {
-      tag = '<span class="outfit-tag" title="You own one, so this is the same one again">Re-worn</span>';
+      tag = '<span class="outfit-tag" title="You own one, so this is the same one again.' + wearNote + '">Re-worn' + count + '</span>';
+    } else if (entry.canRewear) {
+      var fresh = entry.kind === 'washed' ? 'a washed one, so nothing more to pack' : 'a fresh one, which you will need to pack';
+      tag = (entry.kind === 'washed' ? '<span class="outfit-tag outfit-washed" title="Clean again after laundry, so nothing more to pack">Washed</span>' : '') +
+        '<button class="outfit-toggle" data-action="outfit-rewear" data-day="' + date + '" data-id="' + id + '"' +
+        ' data-fk="rewear-' + date + '-' + id + '" aria-pressed="' + (entry.kind === 'rewear') + '"' +
+        ' title="On: wear the one from before again. Off: ' + fresh + '.' + wearNote + '">Re-wear' + count + '</button>';
     } else if (entry.kind === 'washed') {
       tag = '<span class="outfit-tag outfit-washed" title="Clean again after laundry, so nothing more to pack">Washed</span>';
-    } else if (entry.kind === 'new' || entry.kind === 'rewear') {
-      tag = '<button class="outfit-toggle" data-action="outfit-rewear" data-day="' + date + '" data-id="' + id + '"' +
-        ' data-fk="rewear-' + date + '-' + id + '" aria-pressed="' + (entry.kind === 'rewear') + '"' +
-        ' title="On: wear an earlier one again. Off: a fresh one, which you will need to pack.">Re-wear</button>';
     }
     return '<span class="outfit-item" data-id="' + id + '">' +
       '<span class="outfit-name">' + esc(entry.item.name) + '</span>' + tag +
@@ -532,6 +543,7 @@
         ok: 'Packed to match'
       }[r.status];
       var worn = r.days > r.needed ? ' · worn ' + r.days + ' days' : '';
+      if (r.rewears) worn += ' · re-worn ' + r.rewears + (r.rewears === 1 ? ' time' : ' times');
       return '<li class="check-row" data-status="' + r.status + '">' +
         '<span class="check-name">' + esc(r.item.name) + '</span>' +
         '<span class="check-counts">need ' + r.needed + ' · packed ' + r.packed + worn + '</span>' +

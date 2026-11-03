@@ -412,6 +412,7 @@ details.plan-block[open] > summary { margin-bottom: 8px; }
 .wash-item[aria-pressed="true"] { border-color: var(--shell); color: var(--ink); text-decoration: none; }
 .wash-item[aria-pressed="true"]::before { content: "\2611  "; }
 .outfit-washed { border-color: var(--ok); color: var(--ok); }
+.rewear-count { font-variant-numeric: tabular-nums; font-weight: 700; }
 .check-laundry { margin-top: 2px; color: var(--ok); font-size: 13px; font-weight: 600; }
 .check-summary { font-weight: 600; }
 .check-empty { color: var(--muted); font-size: 13px; }

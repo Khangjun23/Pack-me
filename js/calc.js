@@ -355,6 +355,9 @@ var Calc = (function () {
   //   washed  a piece that came back clean from laundry, so nothing more to pack
   //   rewear  wearing a dirty piece again, by choice
   //   same    the only one you own, worn again without washing
+  // Each entry also says whether a dirty piece is free to wear again (canRewear), and
+  // which wear of that piece it is (wear): 1 when fresh or just washed, 2 on its first
+  // re-wear, and so on. A re-wear takes the piece worn most recently.
   // On a laundry day, everything dirty by the end of that day is washed, except
   // the items listed in laundry.except. With ignoreLaundry, laundry days are skipped,
   // which shows what laundry saves.
@@ -366,12 +369,13 @@ var Calc = (function () {
       var plan = dayPlans[date] || {};
       entries[date] = (plan.outfit || []).filter(function (entry) { return itemsById[entry.itemId]; }).map(function (entry) {
         var item = itemsById[entry.itemId];
-        var s = state[item.id] || (state[item.id] = { worn: false, dirty: 0, clean: 0 });
+        var s = state[item.id] || (state[item.id] = { worn: false, dirty: 0, clean: 0, wears: 0 });
+        var canRewear = item.ownedQty > 1 && s.dirty > 0;
         var kind;
         if (!s.worn) {
           kind = 'first';
           s.dirty += 1;
-        } else if (entry.rewear && item.ownedQty > 1 && s.dirty > 0) {
+        } else if (entry.rewear && canRewear) {
           kind = 'rewear';
         } else if (s.clean > 0) {
           kind = 'washed';
@@ -384,7 +388,8 @@ var Calc = (function () {
           kind = 'same';
         }
         s.worn = true;
-        return { item: item, kind: kind };
+        s.wears = kind === 'rewear' || kind === 'same' ? s.wears + 1 : 1;
+        return { item: item, kind: kind, canRewear: canRewear, wear: s.wears };
       });
       if (plan.laundry && !ignoreLaundry) {
         var except = plan.laundry.except || [];
@@ -409,14 +414,16 @@ var Calc = (function () {
   }
 
   // How many of each item the outfits need: one for the first wear, plus one per fresh one after.
+  // Also counts the days a piece is worn again without washing (rewears).
   function outfitNeeds(entriesByDay) {
     var needs = {};
     Object.keys(entriesByDay).forEach(function (date) {
       entriesByDay[date].forEach(function (entry) {
         var id = entry.item.id;
-        needs[id] = needs[id] || { item: entry.item, needed: 0, days: 0 };
+        needs[id] = needs[id] || { item: entry.item, needed: 0, days: 0, rewears: 0 };
         needs[id].days += 1;
         if (entry.kind === 'first' || entry.kind === 'new') needs[id].needed += 1;
+        if (entry.kind === 'rewear' || entry.kind === 'same') needs[id].rewears += 1;
       });
     });
     return needs;
@@ -435,7 +442,7 @@ var Calc = (function () {
       if (need.needed > owned) status = 'owned';
       else if (packed < need.needed) status = 'short';
       else if (packed > need.needed) status = 'extra';
-      return { item: need.item, needed: need.needed, days: need.days, packed: packed, owned: owned, status: status };
+      return { item: need.item, needed: need.needed, days: need.days, rewears: need.rewears || 0, packed: packed, owned: owned, status: status };
     }).sort(function (a, b) {
       return order[a.status] - order[b.status] || a.item.name.localeCompare(b.item.name);
     });
