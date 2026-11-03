@@ -1,5 +1,7 @@
 // Pointer-based dragging and the flight animations.
 // Draggable elements carry data-drag="card" or data-drag="packed", plus data-id.
+// Cards can be dropped on any zone the app reports at the pointer: the suitcase,
+// or a day in the itinerary. Packed boxes only leave or return to the suitcase.
 var Drag = (function () {
   var THRESHOLD = 5;
   var opts = null;
@@ -31,7 +33,8 @@ var Drag = (function () {
       dx: 0,
       dy: 0,
       ghost: null,
-      rect: null
+      rect: null,
+      zone: null
     };
     window.addEventListener('pointermove', onMove);
     window.addEventListener('pointerup', onUp);
@@ -52,9 +55,20 @@ var Drag = (function () {
     return ghost;
   }
 
-  function overDropZone(x, y) {
-    var r = opts.dropZone().getBoundingClientRect();
-    return x >= r.left && x <= r.right && y >= r.top && y <= r.bottom;
+  function insideSuitcase(x, y) {
+    var r = opts.packZone().getBoundingClientRect();
+    return r.width > 0 && x >= r.left && x <= r.right && y >= r.top && y <= r.bottom;
+  }
+
+  function highlight(zone) {
+    if (zone === session.zone) return;
+    clearZone();
+    session.zone = zone;
+    if (zone) zone.classList.add(opts.isBlocked(session.id, zone) ? 'drop-denied' : 'drop-target');
+  }
+
+  function clearZone() {
+    if (session && session.zone) session.zone.classList.remove('drop-target', 'drop-denied');
   }
 
   function onMove(e) {
@@ -65,14 +79,12 @@ var Drag = (function () {
       if (Math.hypot(session.dx, session.dy) < THRESHOLD) return;
       session.rect = session.el.getBoundingClientRect();
       session.ghost = makeGhost(session.el, session.rect);
-      session.blocked = session.kind === 'card' && opts.isBlocked(session.id);
       session.el.classList.add('drag-source');
       document.body.classList.add('is-dragging');
     }
     session.ghost.style.transform = dragTransform(session.dx, session.dy);
-    opts.dropZone().classList.toggle('drop-target', session.kind === 'card' && !session.blocked && overDropZone(e.clientX, e.clientY));
-    opts.dropZone().classList.toggle('drop-denied', session.blocked && overDropZone(e.clientX, e.clientY));
-    opts.dropZone().classList.toggle('drop-out', session.kind === 'packed' && !overDropZone(e.clientX, e.clientY));
+    if (session.kind === 'card') highlight(opts.zoneAt(e.clientX, e.clientY));
+    else opts.packZone().classList.toggle('drop-out', !insideSuitcase(e.clientX, e.clientY));
   }
 
   function dragTransform(dx, dy) {
@@ -81,16 +93,17 @@ var Drag = (function () {
 
   function onUp(e) {
     if (!session || e.pointerId !== session.pointerId) return;
+    var zone = session.kind === 'card' ? opts.zoneAt(e.clientX, e.clientY) : null;
+    var inside = insideSuitcase(e.clientX, e.clientY);
     var s = finishSession();
     if (!s.ghost) return;
-    var inside = overDropZone(e.clientX, e.clientY);
     if (s.kind === 'card') {
-      if (inside && s.blocked) {
+      if (zone && opts.isBlocked(s.id, zone)) {
         flyBack(s);
-        opts.onBlocked(s.id);
-      } else if (inside) {
+        opts.onBlocked(s.id, zone);
+      } else if (zone) {
         s.el.classList.remove('drag-source');
-        flyIn(s.ghost, s.rect, s.dx, s.dy, s.id, function () { opts.onPack(s.id); });
+        flyIn(s.ghost, s.rect, s.dx, s.dy, opts.flyTarget(s.id, zone), function () { opts.onPack(s.id, zone); });
       } else {
         flyBack(s);
       }
@@ -116,6 +129,7 @@ var Drag = (function () {
   }
 
   function finishSession() {
+    clearZone();
     var s = session;
     session = null;
     window.removeEventListener('pointermove', onMove);
@@ -123,7 +137,7 @@ var Drag = (function () {
     window.removeEventListener('pointercancel', onCancel);
     window.removeEventListener('keydown', onKey);
     document.body.classList.remove('is-dragging');
-    opts.dropZone().classList.remove('drop-target', 'drop-denied', 'drop-out');
+    opts.packZone().classList.remove('drop-out');
     return s;
   }
 
@@ -141,8 +155,8 @@ var Drag = (function () {
     animation.oncancel = animation.onfinish;
   }
 
-  function flyIn(ghost, rect, dx, dy, id, done) {
-    var target = opts.flyTarget(id).getBoundingClientRect();
+  function flyIn(ghost, rect, dx, dy, targetEl, done) {
+    var target = targetEl.getBoundingClientRect();
     var endX = target.left + target.width / 2 - (rect.left + rect.width / 2);
     var endY = target.top + target.height / 2 - (rect.top + rect.height / 2);
     var midX = dx + (endX - dx) * 0.6;
@@ -174,10 +188,10 @@ var Drag = (function () {
     });
   }
 
-  // The Add button's route into the bag, with no dragging involved.
-  function flyFrom(el, id, done) {
+  // The Add button's route to a target, with no dragging involved.
+  function flyFrom(el, targetEl, done) {
     var rect = el.getBoundingClientRect();
-    flyIn(makeGhost(el, rect), rect, 0, 0, id, done);
+    flyIn(makeGhost(el, rect), rect, 0, 0, targetEl, done);
   }
 
   return { init: init, flyFrom: flyFrom, reducedMotion: reducedMotion };

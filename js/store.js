@@ -112,7 +112,8 @@ var Store = (function () {
         activeBagId: ids.indexOf(t.activeBagId) !== -1 ? t.activeBagId : ids[0] || null,
         activeCubeId: cubeIds[t.activeCubeId] === true ? t.activeCubeId : null,
         packed: packed,
-        cubes: cubes
+        cubes: cubes,
+        itinerary: cleanItinerary(t.itinerary, itemIds, cubeIds)
       };
     });
     if (!trips.length) trips.push(blankTrip('My trip', bags));
@@ -124,6 +125,7 @@ var Store = (function () {
       trips: trips,
       activeTripId: tripExists ? raw.activeTripId : trips[0].id,
       theme: Seed.THEMES.indexOf(raw.theme) !== -1 ? raw.theme : 'auto',
+      view: raw.view === 'plan' ? 'plan' : 'pack',
       dataVersion: Seed.DATA_VERSION
     };
   }
@@ -162,22 +164,90 @@ var Store = (function () {
     return result;
   }
 
+  var DATE = /^\d{4}-\d{2}-\d{2}$/;
+  var DATE_TIME = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/;
+
+  function shortText(value, max) {
+    return typeof value === 'string' ? value.trim().slice(0, max) : '';
+  }
+
+  // Only real calendar dates, so 2026-13-01 or 2026-02-30 are dropped.
+  function matching(value, pattern) {
+    return typeof value === 'string' && pattern.test(value) && Calc.isDate(value.slice(0, 10)) ? value : '';
+  }
+
+  function blankFlight() {
+    return { flight: '', from: '', to: '', departs: '', arrives: '', ref: '' };
+  }
+
+  function cleanFlight(raw) {
+    var f = raw || {};
+    return {
+      flight: shortText(f.flight, 40),
+      from: shortText(f.from, 40),
+      to: shortText(f.to, 40),
+      departs: matching(f.departs, DATE_TIME),
+      arrives: matching(f.arrives, DATE_TIME),
+      ref: shortText(f.ref, 30)
+    };
+  }
+
+  function blankItinerary() {
+    return { departDate: '', returnDate: '', outbound: blankFlight(), inbound: blankFlight(), days: {} };
+  }
+
+  // Days are kept by date, so changing the trip dates hides a day's plan rather than losing it.
+  function cleanItinerary(raw, itemIds, cubeIds) {
+    var it = raw || {};
+    var days = {};
+    Object.keys(it.days || {}).forEach(function (date) {
+      if (!DATE.test(date)) return;
+      var source = it.days[date] || {};
+      var seen = {};
+      var outfit = (Array.isArray(source.outfit) ? source.outfit : []).filter(function (entry) {
+        var ok = entry && itemIds[entry.itemId] === true && cubeIds[entry.itemId] !== true && !seen[entry.itemId];
+        if (ok) seen[entry.itemId] = true;
+        return ok;
+      }).map(function (entry) {
+        return { itemId: entry.itemId, rewear: entry.rewear === true };
+      });
+      var place = shortText(source.place, 80);
+      if (place || outfit.length) days[date] = { place: place, outfit: outfit };
+    });
+    return {
+      departDate: matching(it.departDate, DATE),
+      returnDate: matching(it.returnDate, DATE),
+      outbound: cleanFlight(it.outbound),
+      inbound: cleanFlight(it.inbound),
+      days: days
+    };
+  }
+
   function blankTrip(name, bags) {
     var first = bags[0] ? bags[0].id : null;
     var packed = {};
     if (first) packed[first] = {};
-    return { id: newId('trip'), name: name, bagIds: first ? [first] : [], activeBagId: first, activeCubeId: null, packed: packed, cubes: {} };
+    return {
+      id: newId('trip'),
+      name: name,
+      bagIds: first ? [first] : [],
+      activeBagId: first,
+      activeCubeId: null,
+      packed: packed,
+      cubes: {},
+      itinerary: blankItinerary()
+    };
   }
 
   function load() {
     var saved = null;
     try {
       saved = localStorage.getItem(KEY);
-      state = saved ? normalize(JSON.parse(saved)) : Seed.state();
+      state = normalize(saved ? JSON.parse(saved) : Seed.state());
     } catch (err) {
       // Keep the unreadable copy in case it can be recovered by hand.
       try { if (saved) localStorage.setItem(KEY + '-unreadable', saved); } catch (e) { /* storage unavailable */ }
-      state = Seed.state();
+      state = normalize(Seed.state());
     }
   }
 
@@ -317,6 +387,10 @@ var Store = (function () {
         Object.keys(t.cubes).forEach(function (cubeId) { delete t.cubes[cubeId][itemId]; });
         delete t.cubes[itemId];
         if (t.activeCubeId === itemId) t.activeCubeId = null;
+        Object.keys(t.itinerary.days).forEach(function (date) {
+          var day = t.itinerary.days[date];
+          day.outfit = day.outfit.filter(function (entry) { return entry.itemId !== itemId; });
+        });
       });
       commit();
     },
@@ -402,6 +476,48 @@ var Store = (function () {
       state.theme = theme;
       commit();
     },
+    setView: function (view) {
+      state.view = view;
+      commit();
+    },
+
+    // Itinerary
+    setTripDates: function (departDate, returnDate) {
+      var it = trip().itinerary;
+      it.departDate = matching(departDate, DATE);
+      it.returnDate = matching(returnDate, DATE);
+      commit();
+    },
+    setFlight: function (which, field, value) {
+      var flight = trip().itinerary[which];
+      if (!flight || !(field in flight)) return;
+      flight[field] = cleanFlight(Object.assign({}, flight, { [field]: value }))[field];
+      commit();
+    },
+    setDayPlace: function (date, place) {
+      planDay(date).place = shortText(place, 80);
+      commit();
+    },
+    addToOutfit: function (date, itemId) {
+      var item = byId(state.items)[itemId];
+      var day = planDay(date);
+      if (!item || item.cube === true || !DATE.test(date)) return false;
+      if (day.outfit.some(function (entry) { return entry.itemId === itemId; })) return false;
+      day.outfit.push({ itemId: itemId, rewear: false });
+      commit();
+      return true;
+    },
+    removeFromOutfit: function (date, itemId) {
+      var day = planDay(date);
+      day.outfit = day.outfit.filter(function (entry) { return entry.itemId !== itemId; });
+      commit();
+    },
+    toggleRewear: function (date, itemId) {
+      planDay(date).outfit.forEach(function (entry) {
+        if (entry.itemId === itemId) entry.rewear = !entry.rewear;
+      });
+      commit();
+    },
 
     // Backups
     exportJSON: function () {
@@ -412,6 +528,11 @@ var Store = (function () {
       commit();
     }
   };
+
+  function planDay(date) {
+    var days = trip().itinerary.days;
+    return days[date] || (days[date] = { place: '', outfit: [] });
+  }
 
   function removeFromTrip(t, bagId) {
     t.bagIds = t.bagIds.filter(function (id) { return id !== bagId; });

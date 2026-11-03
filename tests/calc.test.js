@@ -302,6 +302,57 @@ check('plain text', C.checklistText(list), 'Japan packing list\n\nCarry-on\nShir
 check('nothing packed gives no sections', C.checklist({ name: 'T', bagIds: ['a'], packed: { a: {} }, cubes: {} }, listBags, listItems).sections, []);
 check('missing cubes are safe', C.checklist({ name: 'T', bagIds: ['a'], packed: { a: { shirt: 1 } } }, listBags, listItems).sections[0].lines, ['Shirt']);
 
+// Itinerary dates
+check('trip length is inclusive', C.tripLength('2026-11-20', '2026-11-25'), 6);
+check('same-day trip', C.tripLength('2026-11-20', '2026-11-20'), 1);
+check('return before departure', C.tripLength('2026-11-25', '2026-11-20'), 0);
+check('missing date', C.tripLength('', '2026-11-20'), 0);
+check('impossible date', C.tripLength('2026-02-30', '2026-03-02'), 0);
+check('days across a month end', C.tripDays('2026-11-29', '2026-12-02'), ['2026-11-29', '2026-11-30', '2026-12-01', '2026-12-02']);
+check('days across a leap day', C.tripDays('2028-02-28', '2028-03-01'), ['2028-02-28', '2028-02-29', '2028-03-01']);
+check('long trips are capped', C.tripDays('2026-01-01', '2026-12-31').length, C.MAX_TRIP_DAYS);
+check('long trip length still reported', C.tripLength('2026-01-01', '2026-12-31'), 365);
+check('day label', C.formatDay('2026-11-20'), 'Fri 20 Nov');
+check('bad day label', C.formatDay('nope'), '');
+check('real date', C.isDate('2028-02-29'), true);
+check('no 13th month', C.isDate('2026-13-01'), false);
+check('no 30 February', C.isDate('2026-02-30'), false);
+
+// Outfits
+var wear = {
+  tee: { id: 'tee', name: 'Tee', category: 'Clothes', ownedQty: 7, weightKg: 0.16, volumeL: 1 },
+  jeans: { id: 'jeans', name: 'Jeans', category: 'Clothes', ownedQty: 1, weightKg: 0.7, volumeL: 3 },
+  boots: { id: 'boots', name: 'Boots', category: 'Shoes', weightKg: 1.2, volumeL: 10 },
+  socks: { id: 'socks', name: 'Socks', category: 'Clothes', ownedQty: 2, weightKg: 0.09, volumeL: 0.4 },
+  hat: { id: 'hat', name: 'Hat', category: 'Clothes', ownedQty: 1, weightKg: 0.1, volumeL: 1 },
+  book: { id: 'book', name: 'Book', category: 'Other', ownedQty: 1, weightKg: 0.35, volumeL: 0.5 }
+};
+var planDays = ['d1', 'd2', 'd3'];
+var plans = {
+  d1: { outfit: [{ itemId: 'tee' }, { itemId: 'jeans' }, { itemId: 'socks' }, { itemId: 'gone' }] },
+  d2: { outfit: [{ itemId: 'tee' }, { itemId: 'jeans' }, { itemId: 'socks' }] },
+  d3: { outfit: [{ itemId: 'tee', rewear: true }, { itemId: 'jeans', rewear: false }, { itemId: 'socks' }] },
+  d9: { outfit: [{ itemId: 'boots' }] }
+};
+var entries = C.outfitEntries(planDays, plans, wear);
+check('entry kinds', planDays.map(function (d) { return entries[d].map(function (e) { return e.item.id + ':' + e.kind; }); }),
+  [['tee:first', 'jeans:first', 'socks:first'], ['tee:new', 'jeans:same', 'socks:new'], ['tee:rewear', 'jeans:same', 'socks:new']]);
+var needs = C.outfitNeeds(entries);
+check('fresh tees counted, re-wear not', needs.tee.needed, 2);
+check('single jeans worn every day needs one', [needs.jeans.needed, needs.jeans.days], [1, 3]);
+check('days outside the trip are ignored', needs.boots, undefined);
+check('deleted items are ignored', needs.gone, undefined);
+
+var planTrip = { bagIds: ['a', 'b'], packed: { a: { tee: 1, jeans: 1, boots: 1 }, b: { hat: 1, book: 1, socks: 1 } }, cubes: { c: { tee: 3 } } };
+var report = C.outfitCheck(planTrip, wear, needs);
+check('check rows ordered by urgency', report.rows.map(function (r) { return r.item.id + ':' + r.status; }), ['socks:owned', 'tee:extra', 'jeans:ok']);
+check('packed counted across bags and cubes', report.rows[1].packed, 4);
+check('own fewer than needed', [report.rows[0].needed, report.rows[0].owned], [3, 2]);
+check('packed clothes and shoes not in outfits', report.unplanned.map(function (u) { return u.item.id; }), ['boots', 'hat']);
+var shortTrip = { bagIds: ['a'], packed: { a: { jeans: 1 } }, cubes: {} };
+check('needs more packing', C.outfitCheck(shortTrip, wear, needs).rows.filter(function (r) { return r.item.id === 'tee'; })[0].status, 'short');
+check('empty plans give an empty check', C.outfitCheck(shortTrip, wear, {}).rows, []);
+
 // Formatting
 check('format trims zeros', C.fmt(3.5), '3.5');
 check('format rounds to two decimals', C.fmt(1.2345), '1.23');

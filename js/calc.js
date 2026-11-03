@@ -312,6 +312,105 @@ var Calc = (function () {
     };
   }
 
+  // ----- Itinerary -----
+
+  var MAX_TRIP_DAYS = 60;
+
+  function parseDate(iso) {
+    if (typeof iso !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(iso)) return null;
+    var date = new Date(iso + 'T00:00:00Z');
+    return isNaN(date.getTime()) || date.toISOString().slice(0, 10) !== iso ? null : date;
+  }
+
+  // Days from fly-out to coming back, inclusive. Zero when either is missing or out of order.
+  function tripLength(departIso, returnIso) {
+    var start = parseDate(departIso);
+    var end = parseDate(returnIso);
+    if (!start || !end || end < start) return 0;
+    return Math.round((end - start) / 86400000) + 1;
+  }
+
+  function tripDays(departIso, returnIso) {
+    var count = Math.min(MAX_TRIP_DAYS, tripLength(departIso, returnIso));
+    var start = parseDate(departIso);
+    var days = [];
+    for (var i = 0; i < count; i++) {
+      days.push(new Date(start.getTime() + i * 86400000).toISOString().slice(0, 10));
+    }
+    return days;
+  }
+
+  function formatDay(iso) {
+    var date = parseDate(iso);
+    if (!date) return '';
+    var names = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    var months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    return names[date.getUTCDay()] + ' ' + date.getUTCDate() + ' ' + months[date.getUTCMonth()];
+  }
+
+  // Each outfit entry, in date order, marked as one of:
+  //   first   the first time the item is worn on the trip
+  //   new     another one of an item you own several of
+  //   rewear  wearing an earlier one again, by choice
+  //   same    the only one you own, so it can only be worn again
+  function outfitEntries(days, dayPlans, itemsById) {
+    var worn = {};
+    var result = {};
+    days.forEach(function (date) {
+      var outfit = (dayPlans[date] && dayPlans[date].outfit) || [];
+      result[date] = outfit.filter(function (entry) { return itemsById[entry.itemId]; }).map(function (entry) {
+        var item = itemsById[entry.itemId];
+        var kind;
+        if (!worn[entry.itemId]) kind = 'first';
+        else if (!(item.ownedQty > 1)) kind = 'same';
+        else kind = entry.rewear ? 'rewear' : 'new';
+        worn[entry.itemId] = true;
+        return { item: item, kind: kind };
+      });
+    });
+    return result;
+  }
+
+  // How many of each item the outfits need: one for the first wear, plus one per fresh one after.
+  function outfitNeeds(entriesByDay) {
+    var needs = {};
+    Object.keys(entriesByDay).forEach(function (date) {
+      entriesByDay[date].forEach(function (entry) {
+        var id = entry.item.id;
+        needs[id] = needs[id] || { item: entry.item, needed: 0, days: 0 };
+        needs[id].days += 1;
+        if (entry.kind === 'first' || entry.kind === 'new') needs[id].needed += 1;
+      });
+    });
+    return needs;
+  }
+
+  var WEARABLE = ['Clothes', 'Shoes'];
+
+  // Outfits compared with what is packed anywhere on the trip.
+  function outfitCheck(trip, itemsById, needs) {
+    var order = { owned: 0, short: 1, extra: 2, ok: 3 };
+    var rows = Object.keys(needs).map(function (id) {
+      var need = needs[id];
+      var owned = need.item.ownedQty >= 1 ? need.item.ownedQty : 1;
+      var packed = packedInTrip(trip, id);
+      var status = 'ok';
+      if (need.needed > owned) status = 'owned';
+      else if (packed < need.needed) status = 'short';
+      else if (packed > need.needed) status = 'extra';
+      return { item: need.item, needed: need.needed, days: need.days, packed: packed, owned: owned, status: status };
+    }).sort(function (a, b) {
+      return order[a.status] - order[b.status] || a.item.name.localeCompare(b.item.name);
+    });
+    var unplanned = Object.keys(itemsById).filter(function (id) {
+      var item = itemsById[id];
+      return !needs[id] && item.cube !== true && WEARABLE.indexOf(item.category) !== -1 && packedInTrip(trip, id) > 0;
+    }).map(function (id) {
+      return { item: itemsById[id], packed: packedInTrip(trip, id) };
+    });
+    return { rows: rows, unplanned: unplanned };
+  }
+
   // The trip as a list to tick off: one section per bag, with each packed cube's
   // contents grouped under it, and any filled cubes not yet in a bag at the end.
   function checklist(trip, bagsById, itemsById) {
@@ -418,6 +517,14 @@ var Calc = (function () {
     shadeColors: shadeColors,
     densityLabel: densityLabel,
     makeRoom: makeRoom,
+    MAX_TRIP_DAYS: MAX_TRIP_DAYS,
+    isDate: function (iso) { return parseDate(iso) !== null; },
+    tripLength: tripLength,
+    tripDays: tripDays,
+    formatDay: formatDay,
+    outfitEntries: outfitEntries,
+    outfitNeeds: outfitNeeds,
+    outfitCheck: outfitCheck,
     checklist: checklist,
     checklistMarkdown: checklistMarkdown,
     checklistText: checklistText,

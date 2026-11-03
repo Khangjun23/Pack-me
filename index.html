@@ -37,7 +37,71 @@
   </header>
 
   <main class="layout">
-    <section class="bag-panel" aria-label="Open bag">
+    <section class="bag-panel" aria-label="Packing and itinerary">
+      <div class="view-switch" role="tablist" aria-label="Choose a page">
+        <button class="view-tab" role="tab" data-action="view-pack" id="view-pack">Packing</button>
+        <button class="view-tab" role="tab" data-action="view-plan" id="view-plan">Itinerary</button>
+      </div>
+
+      <div class="plan-view" id="plan-view" hidden>
+        <section class="plan-block">
+          <h2 class="plan-heading">Travel dates</h2>
+          <div class="field-row">
+            <label class="field">Fly out
+              <input type="date" id="depart-date">
+            </label>
+            <label class="field">Come back
+              <input type="date" id="return-date">
+            </label>
+          </div>
+          <p class="plan-length" id="plan-length"></p>
+        </section>
+
+        <details class="plan-block flights" id="flights" open>
+          <summary class="plan-heading">Flights</summary>
+          <div class="flight-grid">
+            <fieldset class="flight" data-flight="outbound">
+              <legend>Flying out</legend>
+              <label class="field">Flight <input data-flight-field="flight" maxlength="40" placeholder="e.g. SQ 12"></label>
+              <div class="field-row">
+                <label class="field">From <input data-flight-field="from" maxlength="40" placeholder="e.g. Singapore SIN"></label>
+                <label class="field">To <input data-flight-field="to" maxlength="40" placeholder="e.g. Tokyo NRT"></label>
+              </div>
+              <div class="field-row">
+                <label class="field">Departs <input type="datetime-local" data-flight-field="departs"></label>
+                <label class="field">Arrives <input type="datetime-local" data-flight-field="arrives"></label>
+              </div>
+              <label class="field">Booking reference <input data-flight-field="ref" maxlength="30"></label>
+            </fieldset>
+            <fieldset class="flight" data-flight="inbound">
+              <legend>Coming back</legend>
+              <label class="field">Flight <input data-flight-field="flight" maxlength="40" placeholder="e.g. SQ 11"></label>
+              <div class="field-row">
+                <label class="field">From <input data-flight-field="from" maxlength="40"></label>
+                <label class="field">To <input data-flight-field="to" maxlength="40"></label>
+              </div>
+              <div class="field-row">
+                <label class="field">Departs <input type="datetime-local" data-flight-field="departs"></label>
+                <label class="field">Arrives <input type="datetime-local" data-flight-field="arrives"></label>
+              </div>
+              <label class="field">Booking reference <input data-flight-field="ref" maxlength="30"></label>
+            </fieldset>
+          </div>
+        </details>
+
+        <section class="plan-block">
+          <h2 class="plan-heading">Outfit check</h2>
+          <div id="outfit-check" aria-live="polite"></div>
+        </section>
+
+        <section class="plan-block plan-days">
+          <h2 class="plan-heading">Days</h2>
+          <p class="plan-hint">Click a day, then use <b>Add</b> on an item, or drag items onto a day.</p>
+          <div class="days" id="days"></div>
+        </section>
+      </div>
+
+      <div class="pack-view" id="pack-view">
       <div class="bag-tabs">
         <div class="tabs" id="bag-tabs" role="tablist" aria-label="Bags on this trip"></div>
         <button class="btn" data-action="bag-add">+ Add bag</button>
@@ -92,6 +156,7 @@
           <div class="fill" id="fill" aria-hidden="true"></div>
           <div class="packed" id="packed" tabindex="-1"></div>
         </div>
+      </div>
       </div>
     </section>
 

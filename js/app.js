@@ -50,14 +50,28 @@
     $('theme-select').value = theme;
   }
 
+  function planning() {
+    return Store.state.view === 'plan';
+  }
+
   function render() {
     applyTheme();
     renderTopbar();
+    renderView();
     renderTabs();
     renderBag();
     renderFilters();
     renderCards();
     renderInBagBadges();
+    renderPlan();
+  }
+
+  function renderView() {
+    var plan = planning();
+    $('plan-view').hidden = !plan;
+    $('pack-view').hidden = plan;
+    $('view-plan').setAttribute('aria-selected', String(plan));
+    $('view-pack').setAttribute('aria-selected', String(!plan));
   }
 
   function renderTopbar() {
@@ -312,8 +326,10 @@
   function visibleItems() {
     var query = ui.search.trim().toLowerCase();
     var trip = Store.trip();
+    var plan = planning();
     return Store.state.items.filter(function (item) {
-      if (Calc.remaining(item, trip) === 0) return false;
+      // Outfits draw on everything you own, packed or not.
+      if (!plan && Calc.remaining(item, trip) === 0) return false;
       if (ui.category !== 'All' && item.category !== ui.category) return false;
       if (!query) return true;
       return (item.name + ' ' + item.description + ' ' + item.category).toLowerCase().indexOf(query) !== -1;
@@ -350,6 +366,19 @@
     var bag = Store.bag();
     var openCube = Store.cube();
     var trip = Store.trip();
+    if (planning()) {
+      var needs = planState().needs;
+      document.querySelectorAll('#cards .card').forEach(function (card) {
+        var item = items[card.dataset.id];
+        var badge = card.querySelector('.in-bag');
+        var needed = needs[item.id] ? needs[item.id].needed : 0;
+        badge.hidden = needed === 0;
+        badge.textContent = 'Planned x' + needed;
+        card.querySelector('.card-left').textContent = item.ownedQty > 1 ? ' · own ' + item.ownedQty : '';
+        card.classList.toggle('blocked', item.cube === true);
+      });
+      return;
+    }
     document.querySelectorAll('#cards .card').forEach(function (card) {
       var item = items[card.dataset.id];
       var badge = card.querySelector('.in-bag');
@@ -369,6 +398,163 @@
         : !!bag && Calc.carryOnBlocked(item, bag);
       card.classList.toggle('blocked', blocked);
     });
+  }
+
+  // ----- Itinerary -----
+
+  function planState() {
+    var it = Store.trip().itinerary;
+    var days = Calc.tripDays(it.departDate, it.returnDate);
+    var entries = Calc.outfitEntries(days, it.days, Store.itemsById());
+    return { it: it, days: days, entries: entries, needs: Calc.outfitNeeds(entries) };
+  }
+
+  // Leaves a field alone while it is being typed in.
+  function setValue(el, value) {
+    if (document.activeElement !== el && el.value !== value) el.value = value;
+  }
+
+  function planBlockReason(id, date) {
+    var item = Store.itemsById()[id];
+    if (!date) return 'Set your fly-out and return dates first.';
+    if (item && item.cube === true) return 'Packing cubes can’t be part of an outfit.';
+    var day = Store.trip().itinerary.days[date];
+    if (item && day && day.outfit.some(function (entry) { return entry.itemId === id; })) {
+      return item.name + ' is already in this day’s outfit.';
+    }
+    return null;
+  }
+
+  function planAdd(id, date) {
+    ui.selectedDay = date;
+    ui.justPlanned = { date: date, id: id };
+    if (!Store.addToOutfit(date, id)) {
+      ui.justPlanned = null;
+      toast(planBlockReason(id, date) || 'That could not be added.');
+    }
+  }
+
+  function dayTarget(date) {
+    var day = document.querySelector('#days .day[data-day="' + date + '"]');
+    return day ? day.querySelector('.outfit') || day : null;
+  }
+
+  function flightLines(date, it) {
+    var lines = [];
+    [['outbound', 'Flying out'], ['inbound', 'Coming back']].forEach(function (pair) {
+      var f = it[pair[0]];
+      var name = f.flight || pair[1];
+      var departs = f.departs;
+      var arrives = f.arrives;
+      if (departs && departs.slice(0, 10) === date) {
+        var line = '✈ ' + name + ': ' + (f.from ? f.from + ' ' : '') + departs.slice(11, 16);
+        if (f.to || arrives) line += ' → ' + (f.to ? f.to + ' ' : '') + (arrives ? arrives.slice(11, 16) : '');
+        if (arrives && arrives.slice(0, 10) !== date) line += ' (' + Calc.formatDay(arrives.slice(0, 10)) + ')';
+        lines.push(line.trim());
+      } else if (arrives && arrives.slice(0, 10) === date) {
+        lines.push('✈ ' + name + ' lands' + (f.to ? ' in ' + f.to : '') + ' at ' + arrives.slice(11, 16));
+      }
+    });
+    return lines;
+  }
+
+  function outfitChip(date, dayNumber, entry) {
+    var id = esc(entry.item.id);
+    var tag = '';
+    if (entry.kind === 'same') {
+      tag = '<span class="outfit-tag" title="You own one, so this is the same one again">Re-worn</span>';
+    } else if (entry.kind === 'new' || entry.kind === 'rewear') {
+      tag = '<button class="outfit-toggle" data-action="outfit-rewear" data-day="' + date + '" data-id="' + id + '"' +
+        ' data-fk="rewear-' + date + '-' + id + '" aria-pressed="' + (entry.kind === 'rewear') + '"' +
+        ' title="On: wear an earlier one again. Off: a fresh one, which you will need to pack.">Re-wear</button>';
+    }
+    return '<span class="outfit-item" data-id="' + id + '">' +
+      '<span class="outfit-name">' + esc(entry.item.name) + '</span>' + tag +
+      '<button class="outfit-remove" data-action="outfit-remove" data-day="' + date + '" data-id="' + id + '"' +
+      ' data-fk="outfit-remove-' + date + '-' + id + '" aria-label="Remove ' + esc(entry.item.name) + ' from day ' + dayNumber + '">×</button>' +
+      '</span>';
+  }
+
+  function dayHTML(date, index, it, entries) {
+    var plan = it.days[date] || { place: '' };
+    var chips = entries.map(function (entry) { return outfitChip(date, index + 1, entry); }).join('');
+    return '<article class="day" data-day="' + date + '" data-selected="' + (date === ui.selectedDay) + '" data-action="day-select">' +
+      '<div class="day-head"><h3>Day ' + (index + 1) + '</h3><span class="day-date">' + Calc.formatDay(date) + '</span></div>' +
+      flightLines(date, it).map(function (line) { return '<p class="day-flight">' + esc(line) + '</p>'; }).join('') +
+      '<label class="day-place">Where <input data-day-place="' + date + '" data-fk="place-' + date + '" maxlength="80" placeholder="e.g. Kyoto" value="' + esc(plan.place) + '"></label>' +
+      '<div class="outfit">' + (chips || '<span class="outfit-empty">No outfit yet</span>') + '</div>' +
+      '</article>';
+  }
+
+  function checkHTML(report) {
+    if (!report.rows.length && !report.unplanned.length) {
+      return '<p class="check-empty">Add outfits to your days to compare them with what you have packed.</p>';
+    }
+    var toPack = report.rows.filter(function (r) { return r.status === 'short' || r.status === 'owned'; }).length;
+    var extra = report.rows.filter(function (r) { return r.status === 'extra'; }).length;
+    var parts = [];
+    if (toPack) parts.push(toPack + (toPack === 1 ? ' item needs' : ' items need') + ' attention');
+    if (extra) parts.push(extra + (extra === 1 ? ' item is' : ' items are') + ' packed more than planned');
+    if (report.unplanned.length) parts.push(report.unplanned.length + ' packed ' + (report.unplanned.length === 1 ? 'item isn’t' : 'items aren’t') + ' in any outfit');
+    var summary = parts.length ? parts.join(' · ') : 'Your outfits match what you have packed.';
+    var rows = report.rows.map(function (r) {
+      var status = {
+        owned: 'Planned ' + r.needed + ', but you own ' + r.owned,
+        short: 'Pack ' + (r.needed - r.packed) + ' more',
+        extra: (r.packed - r.needed) + ' more packed than planned',
+        ok: 'Packed to match'
+      }[r.status];
+      var worn = r.days > r.needed ? ' · worn ' + r.days + ' days' : '';
+      return '<li class="check-row" data-status="' + r.status + '">' +
+        '<span class="check-name">' + esc(r.item.name) + '</span>' +
+        '<span class="check-counts">need ' + r.needed + ' · packed ' + r.packed + worn + '</span>' +
+        '<span class="check-status">' + status + '</span></li>';
+    }).join('');
+    var unplanned = report.unplanned.length
+      ? '<p class="check-unplanned"><b>Packed but not in any outfit:</b> ' + report.unplanned.map(function (u) {
+        return esc(u.item.name) + (u.packed > 1 ? ' x' + u.packed : '');
+      }).join(', ') + '. Leave these out if you won’t wear them.</p>'
+      : '';
+    return '<p class="check-summary">' + summary + '</p>' + (rows ? '<ul class="check-rows">' + rows + '</ul>' : '') + unplanned;
+  }
+
+  function renderPlan() {
+    if (!planning()) return;
+    var trip = Store.trip();
+    var state = planState();
+    var it = state.it;
+    setValue($('depart-date'), it.departDate);
+    setValue($('return-date'), it.returnDate);
+    document.querySelectorAll('#plan-view [data-flight]').forEach(function (fieldset) {
+      var flight = it[fieldset.dataset.flight];
+      fieldset.querySelectorAll('[data-flight-field]').forEach(function (input) {
+        setValue(input, flight[input.dataset.flightField]);
+      });
+    });
+
+    var length = Calc.tripLength(it.departDate, it.returnDate);
+    var lengthEl = $('plan-length');
+    lengthEl.dataset.error = String(!!(it.departDate && it.returnDate && !length));
+    if (lengthEl.dataset.error === 'true') {
+      lengthEl.textContent = 'Your return date is before you fly out.';
+    } else if (!length) {
+      lengthEl.textContent = 'Set both dates to plan each day.';
+    } else {
+      lengthEl.textContent = length + (length === 1 ? ' day' : ' days') +
+        (length > 1 ? ', ' + (length - 1) + (length === 2 ? ' night' : ' nights') : '') +
+        (length > Calc.MAX_TRIP_DAYS ? '. Only the first ' + Calc.MAX_TRIP_DAYS + ' days are shown.' : '');
+    }
+
+    if (state.days.indexOf(ui.selectedDay) === -1) ui.selectedDay = state.days[0] || null;
+    setHTML($('days'), state.days.length
+      ? state.days.map(function (date, i) { return dayHTML(date, i, it, state.entries[date]); }).join('')
+      : '<p class="outfit-empty">Your days will appear here once both dates are set.</p>');
+    if (ui.justPlanned) {
+      var chip = document.querySelector('#days .day[data-day="' + ui.justPlanned.date + '"] .outfit-item[data-id="' + ui.justPlanned.id + '"]');
+      if (chip) chip.classList.add('pop');
+      ui.justPlanned = null;
+    }
+    setHTML($('outfit-check'), checkHTML(Calc.outfitCheck(trip, Store.itemsById(), state.needs)));
   }
 
   // ----- Packing -----
@@ -816,6 +1002,27 @@
   var actions = {
     'pack': function (el) {
       var id = el.dataset.id;
+      if (planning()) {
+        var date = ui.selectedDay;
+        var reason = planBlockReason(id, date);
+        if (reason) {
+          toast(reason);
+          return;
+        }
+        var key = 'plan:' + date + ':' + id;
+        var target = dayTarget(date);
+        if (ui.flying[key]) return;
+        if (!target) {
+          planAdd(id, date);
+          return;
+        }
+        ui.flying[key] = 1;
+        Drag.flyFrom(el.closest('.card'), target, function () {
+          delete ui.flying[key];
+          planAdd(id, date);
+        });
+        return;
+      }
       if (blockReason(id)) {
         refuse(id);
         return;
@@ -824,12 +1031,21 @@
       var left = Calc.remaining(Store.itemsById()[id], Store.trip());
       if ((ui.flying[id] || 0) >= left) return;
       ui.flying[id] = (ui.flying[id] || 0) + 1;
-      Drag.flyFrom(el.closest('.card'), id, function () {
+      Drag.flyFrom(el.closest('.card'), flyTarget(id), function () {
         ui.flying[id] -= 1;
         pack(id);
       });
     },
     'unpack': function (el) { Store.unpack(el.dataset.id); },
+    'view-pack': function () { Store.setView('pack'); },
+    'view-plan': function () { Store.setView('plan'); },
+    'day-select': function (el) {
+      if (ui.selectedDay === el.dataset.day) return;
+      ui.selectedDay = el.dataset.day;
+      renderPlan();
+    },
+    'outfit-remove': function (el) { Store.removeFromOutfit(el.dataset.day, el.dataset.id); },
+    'outfit-rewear': function (el) { Store.toggleRewear(el.dataset.day, el.dataset.id); },
     'room-remove': function (el) { Store.unpack(el.dataset.id, el.dataset.cube || null); },
     'filter': function (el) {
       ui.category = el.dataset.category;
@@ -889,6 +1105,19 @@
 
   $('trip-select').addEventListener('change', function (e) { Store.setActiveTrip(e.target.value); });
   $('theme-select').addEventListener('change', function (e) { Store.setTheme(e.target.value); });
+  $('plan-view').addEventListener('change', function (e) {
+    var target = e.target;
+    if (target.id === 'depart-date' || target.id === 'return-date') {
+      Store.setTripDates($('depart-date').value, $('return-date').value);
+    } else if (target.dataset.flightField) {
+      Store.setFlight(target.closest('[data-flight]').dataset.flight, target.dataset.flightField, target.value);
+    } else if (target.dataset.dayPlace) {
+      // Saving redraws the day cards, so wait until Tab has moved focus to the next field.
+      var date = target.dataset.dayPlace;
+      var place = target.value;
+      setTimeout(function () { Store.setDayPlace(date, place); }, 0);
+    }
+  });
   $('search').addEventListener('input', function (e) {
     ui.search = e.target.value;
     render();
@@ -943,11 +1172,29 @@
   // Box sizes depend on the space available, so they follow the window.
   new ResizeObserver(function () { renderBag(); }).observe($('packed'));
   Drag.init({
-    dropZone: function () { return $('suitcase'); },
-    flyTarget: flyTarget,
-    onPack: pack,
-    isBlocked: function (id) { return blockReason(id) !== null; },
-    onBlocked: refuse,
+    packZone: function () { return $('suitcase'); },
+    zoneAt: function (x, y) {
+      if (planning()) {
+        var el = document.elementFromPoint(x, y);
+        return el ? el.closest('#days .day') : null;
+      }
+      var r = $('suitcase').getBoundingClientRect();
+      return x >= r.left && x <= r.right && y >= r.top && y <= r.bottom ? $('suitcase') : null;
+    },
+    flyTarget: function (id, zone) {
+      return zone.dataset.day ? zone.querySelector('.outfit') || zone : flyTarget(id);
+    },
+    onPack: function (id, zone) {
+      if (zone.dataset.day) planAdd(id, zone.dataset.day);
+      else pack(id);
+    },
+    isBlocked: function (id, zone) {
+      return zone.dataset.day ? planBlockReason(id, zone.dataset.day) !== null : blockReason(id) !== null;
+    },
+    onBlocked: function (id, zone) {
+      if (zone.dataset.day) toast(planBlockReason(id, zone.dataset.day));
+      else refuse(id);
+    },
     onUnpack: function (id) { Store.unpack(id); }
   });
   render();
