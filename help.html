@@ -1,0 +1,246 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>How to use Packing Planner</title>
+  <link rel="stylesheet" href="styles.css">
+  <script>
+    // Match the theme chosen in the app.
+    try {
+      var saved = JSON.parse(localStorage.getItem('packing-app-v1') || '{}');
+      if (saved.theme && saved.theme !== 'auto') document.documentElement.setAttribute('data-theme', saved.theme);
+    } catch (e) {}
+  </script>
+</head>
+<body class="help">
+  <header class="topbar">
+    <h1 class="brand">Packing Planner</h1>
+    <a class="btn btn-primary" href="index.html">Back to the app</a>
+  </header>
+
+  <div class="help-layout">
+    <nav class="help-nav" aria-label="On this page">
+      <p class="help-nav-title">On this page</p>
+      <ol>
+        <li><a href="#start">Before you start</a></li>
+        <li><a href="#bags">1. Set up your bags</a></li>
+        <li><a href="#inventory">2. Fill in your inventory</a></li>
+        <li><a href="#cubes">3. Packing cubes</a></li>
+        <li><a href="#order">4. Pack or plan first</a></li>
+        <li><a href="#packing">5. Packing</a></li>
+        <li><a href="#itinerary">6. Itinerary</a></li>
+        <li><a href="#trips">7. Trips</a></li>
+        <li><a href="#checklist">8. Checklist for Notes</a></li>
+        <li><a href="#themes">9. Themes</a></li>
+        <li><a href="#backup">10. Backups and other devices</a></li>
+        <li><a href="#phone">11. On a phone</a></li>
+        <li><a href="#tips">12. Tips and shortcuts</a></li>
+      </ol>
+    </nav>
+
+    <main class="help-main">
+      <section class="help-intro">
+        <h2>How to use Packing Planner</h2>
+        <p>Packing Planner adds up the weight and volume of everything you pack, tells you whether it all fits, and helps you plan outfits so you don’t bring more than you need.</p>
+        <p>The usual order is: set up your <b>bags</b>, fill in your <b>inventory</b>, then <b>pack</b> and <b>plan your itinerary</b>, in whichever order suits you.</p>
+      </section>
+
+      <section id="start">
+        <h2>Before you start</h2>
+        <ul>
+          <li>Open <code>index.html</code> in your browser. There is nothing to install.</li>
+          <li>The app comes with starter bags and items. Edit or delete them to match your own gear.</li>
+          <li>Every change saves automatically in this browser. Use <b>Export</b> now and then to keep a backup (see <a href="#backup">Backups</a>).</li>
+          <li>The screen has two sides. The <b>left</b> holds the open suitcase, or the itinerary. The <b>right</b> holds your inventory: one card per item.</li>
+        </ul>
+      </section>
+
+      <section id="bags">
+        <h2><span class="step">1</span> Set up your bags</h2>
+        <p>Bags sit as tabs above the suitcase. Only one bag is open at a time, and everything you add goes into the open bag.</p>
+        <ol>
+          <li>Click <b>+ Add bag</b>. Pick a bag you already have, or click <b>Create a new bag</b>.</li>
+          <li>Fill in:
+            <ul>
+              <li><b>Name</b>, such as “Carry-on”.</li>
+              <li><b>Empty weight</b>: what the bag weighs on its own. It counts towards the total.</li>
+              <li><b>Weight limit</b>: your airline’s limit for this bag.</li>
+              <li><b>Interior size</b> in cm. The <b>Capacity</b> in litres is worked out for you, and you can type over it.</li>
+              <li><b>This is a carry-on bag</b>: tick it for cabin bags. Only carry-on bags accept carry-on-only items such as batteries.</li>
+            </ul>
+          </li>
+          <li>Click a bag’s tab to open it. The number on each tab is how many items are in it.</li>
+          <li>To change a bag, open it and click <b>Edit bag</b>. From there, <b>Remove from trip</b> takes it off this trip only, and <b>Delete everywhere</b> removes it from all trips.</li>
+        </ol>
+      </section>
+
+      <section id="inventory">
+        <h2><span class="step">2</span> Fill in your inventory</h2>
+        <p>The inventory is everything you might bring, shared by all your trips. Click <b>+ Add item</b>, or <b>Edit</b> on a card.</p>
+        <dl class="help-fields">
+          <dt>Name and short description</dt>
+          <dd>Shown on the card. Use the description for a model, size or note.</dd>
+          <dt>Category</dt>
+          <dd>Pick one or type a new one. Categories become the filter buttons above the cards. <b>Clothes</b> and <b>Shoes</b> are the ones the itinerary checks.</dd>
+          <dt>How many you own</dt>
+          <dd>The app never lets you pack more than this across the whole trip. Once they are all packed, the card hides. With 7 T-shirts, the card shows “3 of 7 left” as you pack.</dd>
+          <dt>Weight (kg)</dt>
+          <dd>The weight of one.</dd>
+          <dt>Packed volume (L) and dimensions</dt>
+          <dd>For rigid or long things like a tripod or laptop, enter the dimensions in cm. The volume is calculated, and the app warns you if the item is too long for a bag. For soft things like clothes, skip the dimensions and type a rough packed volume.</dd>
+          <dt>Carry-on only</dt>
+          <dd>Tick this for electronics and batteries. These items can only go into a bag marked as carry-on, never a checked bag or a cube.</dd>
+          <dt>Icon, emoji or photo</dt>
+          <dd>Choose an icon, or type or paste <b>any emoji</b> in “Or use any emoji”. On a Mac, press Control-Command-Space or fn-E to open the emoji keyboard. You can also add a <b>photo</b>, which replaces the icon. Photos are shrunk to save space.</dd>
+        </dl>
+        <p><b>Copy</b> on a card makes a duplicate with the same weight and size. Rename it for things like a second pair of similar trousers. <b>Delete item</b> is in the edit window, and it also removes the item from any bags and outfits.</p>
+        <p>Use the <b>search box</b> and <b>category buttons</b> to find items quickly.</p>
+      </section>
+
+      <section id="cubes">
+        <h2><span class="step">3</span> Packing cubes</h2>
+        <p>A packing cube is an item that holds other items, so you can fill each cube and then put the cube in a bag.</p>
+        <ol>
+          <li>Add an item and tick <b>This is a packing cube that holds other items</b>. Enter how much it <b>holds</b> in litres and its own weight.</li>
+          <li>Cubes appear as tabs in the <b>Cubes</b> row under the bag tabs. Click one to fill it. The suitcase becomes the open cube.</li>
+          <li>Add clothes and other items to it, just as you would to a bag.</li>
+          <li>Open a bag again, then drag or add the <b>cube’s card</b> into it. The cube brings its contents along, and their weight and volume count towards the bag.</li>
+        </ol>
+        <p>A cube can’t go inside another cube, and carry-on-only items can’t go in a cube. Taking a cube out of a bag keeps its contents inside the cube. The top bar warns you if a filled cube isn’t in any bag yet.</p>
+      </section>
+
+      <section id="order">
+        <h2><span class="step">4</span> Pack first, or plan first</h2>
+        <p>Use the <b>Packing</b> and <b>Itinerary</b> switch at the top left. Both pages use the same inventory, so you can start with either.</p>
+        <div class="help-paths">
+          <div class="help-path">
+            <h3>Pack, then plan</h3>
+            <p>Pack what you think you need. Then plan each day’s outfit, and the <b>Outfit check</b> tells you what you packed but won’t wear, or what you are short of.</p>
+          </div>
+          <div class="help-path">
+            <h3>Plan, then pack</h3>
+            <p>Plan outfits day by day first, and the Outfit check tells you how many of each item to pack. Then switch to Packing and pack exactly that.</p>
+          </div>
+        </div>
+      </section>
+
+      <section id="packing">
+        <h2><span class="step">5</span> Packing</h2>
+        <h3>Adding and removing items</h3>
+        <ul>
+          <li><b>Drag</b> a card by its picture onto the open suitcase, or click its <b>Add</b> button. Adding the same item again raises its count, such as ×3.</li>
+          <li>To take something out, drag its box out of the suitcase, or click the <b>×</b> on the box. Each removal takes out one.</li>
+          <li>Cards show <b>In bag ×2</b> for what is in the open bag or cube, and how many you have left.</li>
+          <li>The app refuses an item with a short message when it doesn’t belong. For example, a camera in a checked bag, a cube inside a cube, or more items than you own.</li>
+        </ul>
+        <h3>Reading the suitcase</h3>
+        <ul>
+          <li><b>Weight</b> and <b>Volume</b> meters show the open bag’s totals against its limits, including the bag’s own weight. They turn <span class="help-amber">amber</span> at 90% and <span class="help-red">red</span> when over.</li>
+          <li>The status line under the meters gives the reason, such as “Over by 3.5 L” or “Tripod is too long for this bag”.</li>
+          <li>Each packed item is a box. <b>Box size shows volume</b>, so bigger boxes take more space. <b>Colour shows weight</b>: <span class="legend-scale help-scale" aria-hidden="true"></span> darker means heavier. Hover over a box for its exact numbers.</li>
+          <li>The <b>Trip total</b> in the top bar adds up every bag on the trip.</li>
+        </ul>
+        <h3>Make room</h3>
+        <p>When a bag is near or over a limit, <b>Make room</b> appears above the suitcase. It lists the heaviest and the bulkiest items, with each one’s share of the total. It also tells you which single item would fix the problem if removed. Click <b>Remove</b> beside one to take it out.</p>
+      </section>
+
+      <section id="itinerary">
+        <h2><span class="step">6</span> Itinerary</h2>
+        <h3>Dates and flights</h3>
+        <ul>
+          <li>Set <b>Fly out</b> and <b>Come back</b> under Travel dates. One card appears for each day of the trip, up to 60 days.</li>
+          <li>Under <b>Flights</b>, fill in your outbound and return flights: number, from, to, times and booking reference. Each flight shows on the day it departs and lands.</li>
+          <li>Type <b>Where</b> you will be on each day.</li>
+        </ul>
+        <h3>Outfits</h3>
+        <ul>
+          <li>Click a day to select it, then use <b>Add</b> on a card. You can also drag a card straight onto a day.</li>
+          <li>On the itinerary, cards show <b>Planned ×N</b>, which is how many of that item your outfits need.</li>
+          <li>Each item in an outfit shows a tag:
+            <ul>
+              <li><b>Re-wear</b>: a button for items you own several of. Turn it on to wear yesterday’s piece again instead of a fresh one, so there’s one less to pack.</li>
+              <li><b>Re-worn</b>: for items you own only one of, worn again.</li>
+              <li><b>Washed</b>: a piece that came back clean from laundry, so there’s nothing more to pack.</li>
+            </ul>
+          </li>
+          <li>The <b>re-wear counter</b>, such as <b>Re-wear 2×</b>, shows how many times that piece has been re-worn since it was fresh or last washed.</li>
+        </ul>
+        <h3>Laundry days</h3>
+        <ul>
+          <li>Click <b>Laundry</b> on a day when you will wash clothes. Everything worn so far is washed at the end of that day and can be worn again as a fresh piece.</li>
+          <li>All dirty items are ticked by default. Untick anything you won’t wash.</li>
+          <li>After a wash, you can wear a washed piece for several days in a row by turning on <b>Re-wear</b> on the days after.</li>
+        </ul>
+        <h3>Outfit check</h3>
+        <p>The Outfit check compares your outfits with what is packed across all bags and cubes:</p>
+        <ul>
+          <li><b>Pack N more</b>: your outfits need more than you’ve packed.</li>
+          <li><b>N more packed than planned</b>: you could leave some at home.</li>
+          <li><b>Planned N, but you own M</b>: plan a re-wear or a laundry day.</li>
+          <li><b>Packed to match</b>: all good.</li>
+          <li>It also lists how many days each item is worn and how many times it’s re-worn, how many items laundry saves you, and any clothes or shoes you packed but didn’t put in an outfit.</li>
+        </ul>
+      </section>
+
+      <section id="trips">
+        <h2><span class="step">7</span> Trips</h2>
+        <p>Use the <b>Trip</b> menu at the top to switch between trips. Each trip has its own bags, packing and itinerary, and all trips share one inventory.</p>
+        <ul>
+          <li><b>New</b> starts an empty trip.</li>
+          <li><b>Rename</b> changes the trip’s name.</li>
+          <li><b>Duplicate</b> copies the whole trip, which is handy for a similar trip.</li>
+          <li><b>Delete</b> removes the trip, but your items and bags stay.</li>
+        </ul>
+      </section>
+
+      <section id="checklist">
+        <h2><span class="step">8</span> Checklist for Apple Notes</h2>
+        <ol>
+          <li>Click <b>Checklist</b> in the top bar. It lists everything packed, by bag, with each cube’s contents grouped under it.</li>
+          <li>Click <b>Download for Notes</b>, then in Notes on your Mac choose <b>File › Import Markdown</b>. This needs macOS 26 or later.</li>
+          <li>Or click <b>Copy as text</b>, paste it into a note, select it, and click the Checklist button in Notes.</li>
+        </ol>
+        <p>The note syncs to your iPhone through iCloud, so you can tick things off as you pack.</p>
+      </section>
+
+      <section id="themes">
+        <h2><span class="step">9</span> Themes</h2>
+        <p>Choose a colour from <b>Theme</b> in the top bar: Automatic (follows your device’s light or dark mode), Sky blue, Dark blue, Sage green, Wine red, Black or White.</p>
+      </section>
+
+      <section id="backup">
+        <h2><span class="step">10</span> Backups and other devices</h2>
+        <ul>
+          <li>Your data lives in this browser on this device only. Clearing your browser’s site data erases it.</li>
+          <li><b>Export</b> downloads everything, including items, bags, trips and photos, as one file. Keep it somewhere safe.</li>
+          <li><b>Import</b> loads an exported file and <b>replaces</b> what is in the app now.</li>
+          <li>To move to another device or browser, Export on one and Import on the other. The two copies don’t stay in sync afterwards.</li>
+          <li>If storage fills up, the app says so. Remove some photos to free space.</li>
+        </ul>
+      </section>
+
+      <section id="phone">
+        <h2><span class="step">11</span> On a phone</h2>
+        <ul>
+          <li>On a narrow screen, the page stacks: suitcase or itinerary first, then the inventory.</li>
+          <li>The <b>Add</b> button is the quickest way to pack on a phone.</li>
+          <li>To drag, hold a card by its picture and move towards the top edge of the screen. The page scrolls up until the suitcase or day appears, and then you can drop. Swiping on a card’s text scrolls the page normally.</li>
+          <li>In Safari, use <b>Share › Add to Home Screen</b> to give the app its own icon.</li>
+        </ul>
+      </section>
+
+      <section id="tips">
+        <h2><span class="step">12</span> Tips and shortcuts</h2>
+        <ul>
+          <li>Press <b>Esc</b> while dragging to cancel and send the item back.</li>
+          <li>Everything works with the keyboard: Tab to a button and press Enter.</li>
+          <li>Hover over packed boxes and outfit tags to see more detail.</li>
+          <li>Starter weights and sizes are estimates. Weigh your own gear for the best results.</li>
+        </ul>
+        <p class="help-back"><a class="btn btn-primary" href="index.html">Back to the app</a></p>
+      </section>
+    </main>
+  </div>
+</body>
+</html>

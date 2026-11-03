@@ -2,8 +2,12 @@
 // Draggable elements carry data-drag="card" or data-drag="packed", plus data-id.
 // Cards can be dropped on any zone the app reports at the pointer: the suitcase,
 // or a day in the itinerary. Packed boxes only leave or return to the suitcase.
+// Holding a drag near the top or bottom of the window scrolls the page, so on a
+// phone, where the suitcase sits far above the cards, items can still reach it.
 var Drag = (function () {
   var THRESHOLD = 5;
+  var EDGE = 70;
+  var MAX_SCROLL = 18;
   var opts = null;
   var session = null;
 
@@ -32,6 +36,9 @@ var Drag = (function () {
       startY: e.clientY,
       dx: 0,
       dy: 0,
+      x: e.clientX,
+      y: e.clientY,
+      scrolling: false,
       ghost: null,
       rect: null,
       zone: null
@@ -83,8 +90,40 @@ var Drag = (function () {
       document.body.classList.add('is-dragging');
     }
     session.ghost.style.transform = dragTransform(session.dx, session.dy);
-    if (session.kind === 'card') highlight(opts.zoneAt(e.clientX, e.clientY));
-    else opts.packZone().classList.toggle('drop-out', !insideSuitcase(e.clientX, e.clientY));
+    session.x = e.clientX;
+    session.y = e.clientY;
+    updateZone();
+    autoScroll();
+  }
+
+  function updateZone() {
+    if (session.kind === 'card') highlight(opts.zoneAt(session.x, session.y));
+    else opts.packZone().classList.toggle('drop-out', !insideSuitcase(session.x, session.y));
+  }
+
+  function scrollSpeed(y) {
+    var height = window.innerHeight;
+    if (y < EDGE) return -Math.ceil(MAX_SCROLL * Math.min(1, (EDGE - y) / EDGE));
+    if (y > height - EDGE) return Math.ceil(MAX_SCROLL * Math.min(1, (y - height + EDGE) / EDGE));
+    return 0;
+  }
+
+  // Keeps scrolling while the pointer rests near an edge, since no moves arrive then.
+  function autoScroll() {
+    if (session.scrolling || !scrollSpeed(session.y)) return;
+    var s = session;
+    s.scrolling = true;
+    (function step() {
+      var speed = session === s ? scrollSpeed(s.y) : 0;
+      if (!speed) {
+        s.scrolling = false;
+        return;
+      }
+      var before = window.scrollY;
+      window.scrollBy(0, speed);
+      if (window.scrollY !== before) updateZone();
+      requestAnimationFrame(step);
+    })();
   }
 
   function dragTransform(dx, dy) {
@@ -169,10 +208,13 @@ var Drag = (function () {
     ], 420, 'cubic-bezier(.3,.7,.3,1)', done);
   }
 
+  // Back to wherever the source sits now, which moves if the page scrolled.
   function flyBack(s) {
+    var now = s.el.getBoundingClientRect();
+    var back = 'translate(' + (now.left - s.rect.left) + 'px,' + (now.top - s.rect.top) + 'px)';
     run(s.ghost, [
       { transform: dragTransform(s.dx, s.dy), opacity: 1 },
-      { transform: 'none', opacity: 0.6 }
+      { transform: back, opacity: 0.6 }
     ], 260, 'cubic-bezier(.2,.8,.2,1)', function () {
       s.el.classList.remove('drag-source');
     });
