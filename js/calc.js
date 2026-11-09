@@ -455,6 +455,49 @@ var Calc = (function () {
     return { rows: rows, unplanned: unplanned };
   }
 
+  // ----- Inventory order -----
+
+  var SORTS = ['custom', 'name', 'icon'];
+
+  function compareNames(a, b) {
+    return a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' });
+  }
+
+  // custom keeps your own order. name sorts A to Z, with numbers in counting order.
+  // icon groups items that share an emoji, in the icon picker's order and then any
+  // other emoji in the order they first appear, A to Z within each group. Items with
+  // a photo hide their emoji, so they come last.
+  function sortItems(items, mode, iconOrder) {
+    if (mode === 'name') return items.slice().sort(compareNames);
+    if (mode !== 'icon') return items.slice();
+    var rank = {};
+    (iconOrder || []).forEach(function (icon, i) { rank[icon] = i; });
+    var next = (iconOrder || []).length;
+    items.forEach(function (item) {
+      if (!item.photo && !(item.icon in rank)) rank[item.icon] = next++;
+    });
+    return items.slice().sort(function (a, b) {
+      var groupA = a.photo ? Infinity : rank[a.icon];
+      var groupB = b.photo ? Infinity : rank[b.icon];
+      return groupA === groupB ? compareNames(a, b) : groupA - groupB;
+    });
+  }
+
+  // Planned items still to pack: what the outfits need, capped at what you own,
+  // less what is already packed anywhere on the trip. Cubes are never planned.
+  function plannedToPack(trip, needs) {
+    var result = {};
+    Object.keys(needs).forEach(function (id) {
+      var need = needs[id];
+      if (need.item.cube === true || need.needed <= 0) return;
+      var owned = need.item.ownedQty >= 1 ? need.item.ownedQty : 1;
+      var target = Math.min(need.needed, owned);
+      var packed = packedInTrip(trip, id);
+      if (packed < target) result[id] = { needed: need.needed, target: target, packed: packed, toPack: target - packed };
+    });
+    return result;
+  }
+
   // The trip as a list to tick off: one section per bag, with each packed cube's
   // contents grouped under it, and any filled cubes not yet in a bag at the end.
   function checklist(trip, bagsById, itemsById) {
@@ -570,6 +613,9 @@ var Calc = (function () {
     outfitEntries: outfitEntries,
     outfitNeeds: outfitNeeds,
     outfitCheck: outfitCheck,
+    plannedToPack: plannedToPack,
+    SORTS: SORTS,
+    sortItems: sortItems,
     checklist: checklist,
     checklistMarkdown: checklistMarkdown,
     checklistText: checklistText,

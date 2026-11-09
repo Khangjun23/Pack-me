@@ -315,11 +315,35 @@
     }, []);
   }
 
+  // The packing page's extra filter: items the itinerary plans but are not packed yet.
+  var PLANNED = ':planned';
+
+  function hasPlan() {
+    return Object.keys(planState().needs).some(function (id) {
+      return Store.itemsById()[id].cube !== true;
+    });
+  }
+
+  // The itinerary shows only real categories, so the planned filter falls back to All there.
+  function activeCategory() {
+    return ui.category === PLANNED && planning() ? 'All' : ui.category;
+  }
+
   function renderFilters() {
     var cats = categories();
-    if (ui.category !== 'All' && cats.indexOf(ui.category) === -1) ui.category = 'All';
+    var showPlanned = !planning() && hasPlan();
+    if (ui.category === PLANNED ? !hasPlan() : ui.category !== 'All' && cats.indexOf(ui.category) === -1) ui.category = 'All';
+    var current = activeCategory();
+    var planned = '';
+    if (showPlanned) {
+      var left = Object.keys(Calc.plannedToPack(Store.trip(), planState().needs)).length;
+      planned = '<button class="filter filter-planned" data-action="filter" data-category="' + PLANNED + '" data-fk="filter-planned"' +
+        ' aria-pressed="' + (current === PLANNED) + '" title="Items in your itinerary outfits that still need packing">' +
+        'Planned items<span class="filter-count">' + left + '</span></button>';
+    }
     setHTML($('filters'), ['All'].concat(cats).map(function (c, i) {
-      return '<button class="filter" data-action="filter" data-category="' + esc(c) + '" data-fk="filter-' + i + '" aria-pressed="' + (c === ui.category) + '">' + esc(c) + '</button>';
+      var button = '<button class="filter" data-action="filter" data-category="' + esc(c) + '" data-fk="filter-' + i + '" aria-pressed="' + (c === current) + '">' + esc(c) + '</button>';
+      return i === 0 ? button + planned : button;
     }).join(''));
   }
 
@@ -327,16 +351,24 @@
     var query = ui.search.trim().toLowerCase();
     var trip = Store.trip();
     var plan = planning();
-    return Store.state.items.filter(function (item) {
+    var category = activeCategory();
+    var toPack = category === PLANNED ? Calc.plannedToPack(trip, planState().needs) : null;
+    var sorted = Calc.sortItems(Store.state.items, Store.state.sort, Seed.ICONS);
+    return sorted.filter(function (item) {
       // Outfits draw on everything you own, packed or not.
       if (!plan && Calc.remaining(item, trip) === 0) return false;
-      if (ui.category !== 'All' && item.category !== ui.category) return false;
+      if (toPack) {
+        if (!toPack[item.id]) return false;
+      } else if (category !== 'All' && item.category !== category) {
+        return false;
+      }
       if (!query) return true;
       return (item.name + ' ' + item.description + ' ' + item.category).toLowerCase().indexOf(query) !== -1;
     });
   }
 
   function renderCards() {
+    $('sort-select').value = Store.state.sort;
     var list = visibleItems();
     setHTML($('cards'), list.map(function (item) {
       return '<article class="card" data-drag="card" data-id="' + esc(item.id) + '">' +
@@ -355,9 +387,12 @@
         '</div></div></article>';
     }).join(''));
     $('no-results').hidden = list.length > 0;
-    $('no-results').textContent = !ui.search.trim() && ui.category === 'All'
-      ? 'Everything in your inventory is packed for this trip.'
-      : 'No unpacked items match.';
+    var noSearch = !ui.search.trim();
+    $('no-results').textContent = activeCategory() === PLANNED
+      ? (noSearch ? 'Everything in your outfits is packed. Nice work.' : 'No planned items match.')
+      : noSearch && activeCategory() === 'All'
+        ? 'Everything in your inventory is packed for this trip.'
+        : 'No unpacked items match.';
   }
 
   function renderInBagBadges() {
@@ -379,6 +414,7 @@
       });
       return;
     }
+    var toPack = activeCategory() === PLANNED ? Calc.plannedToPack(trip, planState().needs) : null;
     document.querySelectorAll('#cards .card').forEach(function (card) {
       var item = items[card.dataset.id];
       var badge = card.querySelector('.in-bag');
@@ -392,6 +428,8 @@
       } else if (item.ownedQty > 1) {
         left = ' · ' + Calc.remaining(item, trip) + ' of ' + item.ownedQty + ' left';
       }
+      var plan = toPack && toPack[item.id];
+      if (plan) left = ' · pack ' + plan.toPack + ' more for your outfits';
       card.querySelector('.card-left').textContent = left;
       var blocked = openCube
         ? item.cube === true || item.carryOnOnly === true
@@ -1187,6 +1225,7 @@
 
   $('trip-select').addEventListener('change', function (e) { Store.setActiveTrip(e.target.value); });
   $('theme-select').addEventListener('change', function (e) { Store.setTheme(e.target.value); });
+  $('sort-select').addEventListener('change', function (e) { Store.setSort(e.target.value); });
   $('plan-view').addEventListener('change', function (e) {
     var target = e.target;
     if (target.id === 'depart-date' || target.id === 'return-date') {

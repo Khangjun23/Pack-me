@@ -353,6 +353,20 @@ var shortTrip = { bagIds: ['a'], packed: { a: { jeans: 1 } }, cubes: {} };
 check('needs more packing', C.outfitCheck(shortTrip, wear, needs).rows.filter(function (r) { return r.item.id === 'tee'; })[0].status, 'short');
 check('empty plans give an empty check', C.outfitCheck(shortTrip, wear, {}).rows, []);
 
+// Planned items still to pack
+var toPackTrip = { bagIds: ['a'], packed: { a: { tee: 1 } }, cubes: { c: { socks: 2 } } };
+var toPackNeeds = {
+  tee: { item: wear.tee, needed: 3 },
+  socks: { item: wear.socks, needed: 3 },
+  jeans: { item: wear.jeans, needed: 1 },
+  cube: { item: { id: 'cube', cube: true, ownedQty: 1 }, needed: 1 }
+};
+var toPack = C.plannedToPack(toPackTrip, toPackNeeds);
+check('planned items left to pack', Object.keys(toPack).sort(), ['jeans', 'tee']);
+check('counts what is left, across bags and cubes', [toPack.tee.toPack, toPack.tee.packed, toPack.jeans.toPack], [2, 1, 1]);
+check('capped at what you own', C.plannedToPack({ bagIds: ['a'], packed: { a: {} }, cubes: {} }, { socks: toPackNeeds.socks }).socks.target, 2);
+check('nothing planned, nothing to pack', C.plannedToPack(toPackTrip, {}), {});
+
 // Laundry
 var wash = {
   tee: { id: 'tee', name: 'Tee', category: 'Clothes', ownedQty: 7 },
@@ -405,6 +419,23 @@ check('re-wear not offered before anything is dirty', [washThenRewear.entries.d1
 check('single jeans count each re-wear', [midWash.entries.d3.filter(function (e) { return e.item.id === 'jeans'; })[0].wear, C.outfitNeeds(midWash.entries).jeans.rewears], [3, 4]);
 check('check rows carry the re-wear count', C.outfitCheck(planTrip, wear, needs).rows.map(function (r) { return r.item.id + ':' + r.rewears; }), ['socks:0', 'tee:1', 'jeans:2']);
 check('older callers still get entries', C.outfitEntries(washDays, teeDays({ d3: { except: [] } }), wash).d4[0].kind, 'washed');
+
+// Inventory order
+var sortList = [
+  { id: 'a', name: 'Travel cube small 10', icon: '🎒' },
+  { id: 'b', name: 'cotton tee', icon: '👕' },
+  { id: 'c', name: 'Travel cube small 2', icon: '🎒' },
+  { id: 'd', name: 'Alpaca hat', icon: '🦙' },
+  { id: 'e', name: 'Boots', icon: '👕', photo: 'data:image/png;base64,x' },
+  { id: 'f', name: 'Base tee', icon: '👕' },
+  { id: 'g', name: 'Zebra charm', icon: '🦓' }
+];
+var ids = function (list) { return list.map(function (x) { return x.id; }).join(''); };
+check('your order is kept', ids(C.sortItems(sortList, 'custom', ['👕', '🎒'])), 'abcdefg');
+check('A to Z ignores case and counts numbers', ids(C.sortItems(sortList, 'name')), 'dfebcag');
+check('by emoji groups picker icons first, then others as they appear, photos last', ids(C.sortItems(sortList, 'icon', ['👕', '🎒'])), 'fbcadge');
+check('sorting leaves the original alone', ids(sortList), 'abcdefg');
+check('unknown sort keeps your order', ids(C.sortItems(sortList, 'zzz')), 'abcdefg');
 
 // Formatting
 check('format trims zeros', C.fmt(3.5), '3.5');

@@ -743,6 +743,8 @@ details.plan-block[open] > summary { margin-bottom: 8px; }
   margin-bottom: 14px;
 }
 .inventory-tools input[type="search"] { flex: 1 1 150px; max-width: 240px; }
+.sort-control { display: flex; align-items: center; gap: 6px; color: var(--muted); white-space: nowrap; }
+.sort-control select { color: var(--ink); }
 .filters { display: flex; flex-wrap: wrap; gap: 4px; flex: 1 1 auto; }
 .filter {
   padding: 4px 10px;
@@ -753,6 +755,9 @@ details.plan-block[open] > summary { margin-bottom: 8px; }
 }
 .filter:hover { background: var(--surface-2); }
 .filter[aria-pressed="true"] { background: var(--ink); border-color: var(--ink); color: var(--bg); }
+.filter-planned { border: 1.5px solid var(--shell); font-weight: 600; }
+.filter-planned[aria-pressed="true"] { background: var(--shell); border-color: var(--shell); color: var(--shell-ink); }
+.filter-count { margin-left: 6px; font-variant-numeric: tabular-nums; opacity: .8; }
 
 .cards {
   outline: none;

@@ -166,6 +166,13 @@
     <section class="inventory" aria-label="Inventory">
       <div class="inventory-tools">
         <input type="search" id="search" placeholder="Search items" aria-label="Search items">
+        <label class="sort-control">Sort
+          <select id="sort-select">
+            <option value="custom">Your order</option>
+            <option value="name">A to Z</option>
+            <option value="icon">By emoji</option>
+          </select>
+        </label>
         <div class="filters" id="filters"></div>
         <button class="btn btn-primary" data-action="item-add">+ Add item</button>
       </div>

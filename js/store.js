@@ -127,6 +127,7 @@ var Store = (function () {
       activeTripId: tripExists ? raw.activeTripId : trips[0].id,
       theme: Seed.THEMES.indexOf(raw.theme) !== -1 ? raw.theme : 'auto',
       view: raw.view === 'plan' ? 'plan' : 'pack',
+      sort: Calc.SORTS.indexOf(raw.sort) !== -1 ? raw.sort : 'custom',
       dataVersion: Seed.DATA_VERSION
     };
   }
@@ -485,6 +486,10 @@ var Store = (function () {
     },
     setView: function (view) {
       state.view = view;
+      commit();
+    },
+    setSort: function (sort) {
+      state.sort = Calc.SORTS.indexOf(sort) !== -1 ? sort : 'custom';
       commit();
     },
 
