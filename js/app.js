@@ -380,6 +380,8 @@
         '<div class="card-meta">' + fmt(item.weightKg) + ' kg · ' +
         (item.cube === true ? 'holds ' + fmt(item.capacityL) : fmt(item.volumeL)) + ' L<span class="card-left"></span></div>' +
         (item.carryOnOnly ? '<div class="card-flag">Carry-on only</div>' : '') +
+        (item.cube === true && Calc.cubeCarryOnItems(Store.trip(), item.id, Store.itemsById()).length
+          ? '<div class="card-flag" title="It holds carry-on-only items">Carry-on only</div>' : '') +
         '<div class="card-actions">' +
         '<button class="btn" data-action="pack" data-id="' + esc(item.id) + '" data-fk="pack-' + esc(item.id) + '" aria-label="Add ' + esc(item.name) + ' to bag">Add</button>' +
         '<button class="btn" data-action="item-edit" data-id="' + esc(item.id) + '" aria-label="Edit ' + esc(item.name) + '">Edit</button>' +
@@ -398,7 +400,6 @@
   function renderInBagBadges() {
     var packed = Store.packedInBag();
     var items = Store.itemsById();
-    var bag = Store.bag();
     var openCube = Store.cube();
     var trip = Store.trip();
     if (planning()) {
@@ -431,10 +432,8 @@
       var plan = toPack && toPack[item.id];
       if (plan) left = ' · pack ' + plan.toPack + ' more for your outfits';
       card.querySelector('.card-left').textContent = left;
-      var blocked = openCube
-        ? item.cube === true || item.carryOnOnly === true
-        : !!bag && Calc.carryOnBlocked(item, bag);
-      card.classList.toggle('blocked', blocked);
+      var problem = packProblem(item.id);
+      card.classList.toggle('blocked', !!problem && problem.code !== 'none-left' && problem.code !== 'no-bag');
     });
   }
 
@@ -663,22 +662,26 @@
     ], { duration: 420, easing: 'ease-out' });
   }
 
+  function packProblem(id) {
+    return Calc.packProblem(Store.itemsById()[id], Store.packTarget(), Store.trip(), Store.itemsById(), Store.bagsById());
+  }
+
   function blockReason(id) {
     var item = Store.itemsById()[id];
-    var openCube = Store.cube();
-    if (openCube && item && item.cube === true) return 'A cube cannot go inside another cube. Open a bag to pack it.';
-    if (openCube && item && item.carryOnOnly === true) {
-      return item.name + ' is carry-on only, so pack it straight into your carry-on bag rather than a cube.';
-    }
+    var problem = packProblem(id);
+    if (!problem) return null;
     var bag = Store.bag();
-    if (!openCube && !bag) return 'Add a bag to this trip first.';
-    if (!openCube && item && Calc.carryOnBlocked(item, bag)) {
-      return item.name + ' can only go in a carry-on bag, and ' + bag.name + ' is not one.';
-    }
-    if (item && Calc.remaining(item, Store.trip()) === 0) {
-      return 'All of your ' + item.name + ' are already packed for this trip.';
-    }
-    return null;
+    var cube = Store.cube();
+    return {
+      'cube-in-cube': 'A cube cannot go inside another cube. Open a bag to pack it.',
+      'cube-in-checked': item.name + ' is carry-on only, and ' + (cube && cube.name) + ' is packed in ' + (problem.bag && problem.bag.name) +
+        '. Move the cube to your carry-on bag first.',
+      'no-bag': 'Add a bag to this trip first.',
+      'carry-on': item.name + ' can only go in a carry-on bag, and ' + (bag && bag.name) + ' is not one.',
+      'cube-carry-on': item.name + ' holds carry-on-only items (' + (problem.items || []).map(function (i) { return i.name; }).join(', ') +
+        '), so it can only go in a carry-on bag.',
+      'none-left': 'All of your ' + item.name + ' are already packed for this trip.'
+    }[problem.code];
   }
 
   function refuse(id) {

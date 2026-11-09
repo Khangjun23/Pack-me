@@ -151,6 +151,28 @@ r = C.evaluate(holdBag, { cube: 1 }, cubeItems, { cube: { cam: 1 } });
 check('carry-on item inside a cube is reported', texts(r), ['Everything fits', 'Cam must go in a carry-on bag']);
 check('same cube is fine in a carry-on', C.evaluate(cabinBag, { cube: 1 }, cubeItems, { cube: { cam: 1 } }).misplaced.length, 0);
 
+// A camera bag: a cube holding carry-on-only items may only go in a carry-on bag
+var camBags = { cabin: cabinBag, hold: holdBag };
+var camItems = Object.assign({ cube2: { id: 'cube2', name: 'Cube 2', cube: true, weightKg: 0.1, volumeL: 0.2, capacityL: 5 } }, cubeItems);
+var looseTrip = { bagIds: ['cabin', 'hold'], packed: { cabin: {}, hold: {} }, cubes: {} };
+var code = function (p) { return p ? p.code : null; };
+check('camera can go in a loose cube', code(C.packProblem(cubeItems.cam, { cubeId: 'cube' }, looseTrip, camItems, camBags)), null);
+var camInCube = { bagIds: ['cabin', 'hold'], packed: { cabin: {}, hold: {} }, cubes: { cube: { cam: 1 } } };
+check('camera bag fits a carry-on', code(C.packProblem(cubeItems.cube, { bag: cabinBag }, camInCube, camItems, camBags)), null);
+var held = C.packProblem(cubeItems.cube, { bag: holdBag }, camInCube, camItems, camBags);
+check('camera bag refused by a checked bag, naming the camera', [code(held), held.items.map(function (i) { return i.id; })], ['cube-carry-on', ['cam']]);
+check('a cube of clothes still goes anywhere', code(C.packProblem(cubeItems.cube, { bag: holdBag }, { bagIds: ['hold'], packed: { hold: {} }, cubes: { cube: { top: 1 } } }, camItems, camBags)), null);
+var cubeInHold = { bagIds: ['cabin', 'hold'], packed: { cabin: {}, hold: { cube: 1 } }, cubes: { cube: {} } };
+var intoHeld = C.packProblem(cubeItems.cam, { cubeId: 'cube' }, cubeInHold, camItems, camBags);
+check('camera refused by a cube already in a checked bag', [code(intoHeld), intoHeld.bag === holdBag], ['cube-in-checked', true]);
+check('clothes still go in that cube', code(C.packProblem(cubeItems.top, { cubeId: 'cube' }, cubeInHold, camItems, camBags)), null);
+check('camera fine in a cube inside the carry-on', code(C.packProblem(cubeItems.cam, { cubeId: 'cube' }, { bagIds: ['cabin'], packed: { cabin: { cube: 1 } }, cubes: {} }, camItems, camBags)), null);
+check('no cube inside a cube', code(C.packProblem(camItems.cube2, { cubeId: 'cube' }, looseTrip, camItems, camBags)), 'cube-in-cube');
+check('camera still refused by a checked bag directly', code(C.packProblem(cubeItems.cam, { bag: holdBag }, looseTrip, camItems, camBags)), 'carry-on');
+check('no bag open', code(C.packProblem(cubeItems.top, { bag: null }, looseTrip, camItems, camBags)), 'no-bag');
+check('none left to pack', code(C.packProblem(cubeItems.cam, { bag: cabinBag }, camInCube, camItems, camBags)), 'none-left');
+check('carry-on items in a cube are listed', C.cubeCarryOnItems(camInCube, 'cube', camItems).map(function (i) { return i.id; }), ['cam']);
+
 var slim = { noun: 'cube', emptyWeightKg: 0.08, capacityL: 10, weightLimitKg: Infinity, interiorCm: [39, 31, 10], isCarryOn: true };
 check('open cube has no weight warning', C.evaluate(slim, { fleece: 1 }, cubeItems).weightLevel, 'ok');
 check('open cube uses its own word', texts(C.evaluate(slim, {}, cubeItems)), ['This cube is empty']);

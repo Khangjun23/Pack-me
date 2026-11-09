@@ -310,6 +310,12 @@ var Store = (function () {
     };
   }
 
+  // Where Add and drops go: the open cube, or else the open bag.
+  function packTarget() {
+    var t = trip();
+    return t.activeCubeId ? { cubeId: t.activeCubeId } : { bag: bag() };
+  }
+
   function packedInBag() {
     var t = trip();
     if (t.activeCubeId) return t.cubes[t.activeCubeId] || {};
@@ -340,6 +346,7 @@ var Store = (function () {
     cube: cube,
     container: container,
     packedInBag: packedInBag,
+    packTarget: packTarget,
     itemsById: function () { return byId(state.items); },
     bagsById: function () { return byId(state.bags); },
 
@@ -347,16 +354,11 @@ var Store = (function () {
     pack: function (itemId) {
       var t = trip();
       var item = byId(state.items)[itemId];
-      var packed;
-      if (t.activeCubeId) {
-        if (item && (item.cube === true || item.carryOnOnly === true)) return false;
-        packed = t.cubes[t.activeCubeId] || (t.cubes[t.activeCubeId] = {});
-      } else {
-        if (!t.activeBagId) return false;
-        if (item && Calc.carryOnBlocked(item, bag())) return false;
-        packed = t.packed[t.activeBagId] || (t.packed[t.activeBagId] = {});
-      }
-      if (item && Calc.remaining(item, t) === 0) return false;
+      if (Calc.packProblem(item, packTarget(), t, byId(state.items), byId(state.bags))) return false;
+      if (!t.activeCubeId && !t.activeBagId) return false;
+      var packed = t.activeCubeId
+        ? t.cubes[t.activeCubeId] || (t.cubes[t.activeCubeId] = {})
+        : t.packed[t.activeBagId] || (t.packed[t.activeBagId] = {});
       packed[itemId] = (packed[itemId] || 0) + 1;
       commit();
       return true;

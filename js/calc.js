@@ -89,6 +89,38 @@ var Calc = (function () {
     })[0] || null;
   }
 
+  // Carry-on-only items inside a cube, such as a camera in a camera bag.
+  function cubeCarryOnItems(trip, cubeId, itemsById) {
+    var contents = (trip.cubes && trip.cubes[cubeId]) || {};
+    return Object.keys(contents).filter(function (id) {
+      return contents[id] > 0 && itemsById[id] && itemsById[id].carryOnOnly === true;
+    }).map(function (id) { return itemsById[id]; });
+  }
+
+  // Why an item can't be packed into a bag or cube right now, or null when it can.
+  // target is { bag } or { cubeId }. A cube can hold carry-on-only items, but then
+  // the cube itself may only go in a carry-on bag.
+  function packProblem(item, target, trip, itemsById, bagsById) {
+    if (!item) return null;
+    if (target.cubeId) {
+      if (item.cube === true) return { code: 'cube-in-cube' };
+      if (item.carryOnOnly === true) {
+        var bagId = cubeBagId(trip, target.cubeId);
+        var holder = bagId && bagsById[bagId];
+        if (holder && holder.isCarryOn !== true) return { code: 'cube-in-checked', bag: holder };
+      }
+    } else {
+      if (!target.bag) return { code: 'no-bag' };
+      if (carryOnBlocked(item, target.bag)) return { code: 'carry-on' };
+      if (item.cube === true && target.bag.isCarryOn !== true) {
+        var inside = cubeCarryOnItems(trip, item.id, itemsById);
+        if (inside.length) return { code: 'cube-carry-on', items: inside };
+      }
+    }
+    if (remaining(item, trip) === 0) return { code: 'none-left' };
+    return null;
+  }
+
   function remaining(item, trip) {
     var owned = item.ownedQty >= 1 ? item.ownedQty : 1;
     return Math.max(0, owned - packedInTrip(trip, item.id));
@@ -597,6 +629,8 @@ var Calc = (function () {
     sizeProblem: sizeProblem,
     volumeFromDims: volumeFromDims,
     carryOnBlocked: carryOnBlocked,
+    cubeCarryOnItems: cubeCarryOnItems,
+    packProblem: packProblem,
     packedInTrip: packedInTrip,
     remaining: remaining,
     density: density,
